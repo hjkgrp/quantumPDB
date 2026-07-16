@@ -17,10 +17,12 @@
     >>> get_protoss.download(job, "path/to/OUT.pdb")
     >>> get_protoss.download(job, "path/to/OUT.sdf", "ligands")
 
-Protoss automatically removes alternative conformations and overlapping entries. 
-Download the log file (``key="log"`` in ``get_protoss.download``) to see affected atoms. 
+Protoss automatically removes alternative conformations and overlapping entries.
+Under ProteinsPlus API v1, download the log file (``key="log"`` in
+``get_protoss.download``) to see affected atoms. API v2 no longer exposes
+that clash log; ``key="log"`` writes an empty placeholder.
 
-Some metal-coordinating residues may be incorrectly protonated. Use 
+Some metal-coordinating residues may be incorrectly protonated. Use
 ``get_protoss.adjust_activesites(path, metals)`` with the metal IDs to deprotonate
 these residues. 
 """
@@ -249,7 +251,12 @@ def download(job, out, key="protein"):
                 for lig_id in prot.json().get("ligand_set") or []:
                     lig = requests.get(f"{LIGANDS_URL}{lig_id}/", timeout=60)
                     lig.raise_for_status()
-                    parts.append(lig.json()["file_string"])
+                    # API v2 returns each ligand ending in "$$$$" without a
+                    # trailing newline; concatenate as standard multi-mol SDF.
+                    mol = lig.json()["file_string"].rstrip("\n")
+                    if mol.endswith("$$$$"):
+                        mol = mol[:-4].rstrip("\n")
+                    parts.append(mol + "\n$$$$\n")
                 content = "".join(parts)
             elif key == "log":
                 # ProteinsPlus API v2 no longer exposes a Protoss clash log.
