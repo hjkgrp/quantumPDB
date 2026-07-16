@@ -22,7 +22,7 @@ a typical output directory looks like:
        │   ├── {pdb}_protoss.pdb        # Protonated structure (Stage 2)
        │   ├── {pdb}_protoss_orig.pdb   # Copy before active-site fixes
        │   ├── {pdb}_ligands.sdf        # Ligand structures (SDF format)
-       │   └── {pdb}_log.txt            # Protoss processing log
+       │   └── {pdb}_log.txt            # Protoss clash log (empty under API v2)
        ├── charge.csv                   # Per-residue charges
        ├── count.csv                    # Residue counts per sphere
        ├── spin.csv                     # Radical species spins (if present)

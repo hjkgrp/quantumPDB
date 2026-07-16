@@ -65,7 +65,7 @@ After a successful run, the output directory will contain:
        │   ├── 1os7_protoss.pdb      # Protonated structure
        │   ├── 1os7_protoss_orig.pdb # Pre-active-site-fix copy
        │   ├── 1os7_ligands.sdf      # Ligand structures (SDF)
-       │   └── 1os7_log.txt          # Protoss log
+       │   └── 1os7_log.txt          # Protoss clash log (empty under API v2)
        ├── charge.csv                # Per-residue charges
        ├── count.csv                 # Residue counts per sphere
        └── FE_A501/                  # Cluster directory (one per center)

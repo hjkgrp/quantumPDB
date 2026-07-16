@@ -51,7 +51,9 @@ cluster extraction).
    * - ``max_clash_refinement_iter``
      - ``5``
      - Maximum iterations of the Modeller--Protoss feedback loop for
-       resolving steric clashes.
+       resolving steric clashes. Under ProteinsPlus API v2 this loop is
+       currently inactive because the Protoss clash log is no longer
+       available; the parameter is retained for compatibility.
 
 **Cluster model parameters:**
 

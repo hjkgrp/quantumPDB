@@ -47,9 +47,12 @@ hydrogen positions and resolves alternate conformations.
 1. Partial occupancy is resolved by selecting a self-consistent coordinate set,
    prioritizing center residues and canonical amino acids.
 2. The structure is uploaded to Protoss for protonation.
-3. The Protoss log is checked for steric clashes. If clashes are found, the
-   problematic residues are removed and rebuilt by Modeller. This feedback
-   loop repeats up to ``max_clash_refinement_iter`` times (default: 5).
+3. Historically, the Protoss clash log was checked for steric clashes so that
+   problematic residues could be removed and rebuilt by Modeller (up to
+   ``max_clash_refinement_iter`` times). ProteinsPlus API v2 no longer
+   exposes this log, so that feedback loop is currently inactive; the
+   ``*_log.txt`` file is written empty as a placeholder. If residues appear
+   to be missing after protonation, inspect the structure manually.
 4. Metalloenzyme-specific corrections are applied:
 
    - Histidine ring flips for metal coordination
