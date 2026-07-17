@@ -117,7 +117,7 @@ def upload(path):
             if job.get("status") != "success" or not job.get("output_protein"):
                 raise ValueError(job.get("error") or "Upload preprocessing failed")
             return _UploadedProtein(job["output_protein"], path)
-        except (KeyError, json.JSONDecodeError, requests.RequestException) as e:
+        except (KeyError, json.JSONDecodeError, requests.RequestException, TimeoutError) as e:
             print(f"> Upload error ({type(e).__name__}). Retrying in {delay} seconds...")
             
             time.sleep(delay)
@@ -190,7 +190,7 @@ def submit(pid):
                 "protein": f"{PROTOSS_JOBS_URL}{structure_job_id}/",
                 "ligands": f"{PROTOSS_JOBS_URL}{ligand_job_id}/",
             }
-        except (KeyError, json.JSONDecodeError, requests.RequestException) as e:
+        except (KeyError, json.JSONDecodeError, requests.RequestException, TimeoutError) as e:
             print(f"> Submit error ({type(e).__name__}). Retrying in {delay} seconds...")
             time.sleep(delay)
 

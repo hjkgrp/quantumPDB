@@ -57,8 +57,13 @@ def test_custom_pdb_upload_and_protoss_download(tmp_path):
     protoss_path = tmp_path / f"{TEST_PDB_CODE}_protoss.pdb"
     ligands_path = tmp_path / f"{TEST_PDB_CODE}_ligands.sdf"
 
-    r = requests.get(RCSB_PDB_URL, timeout=60)
-    r.raise_for_status()
+    try:
+        r = requests.get(RCSB_PDB_URL, timeout=60)
+        r.raise_for_status()
+    except requests.RequestException as e:
+        pytest.skip(
+            f"RCSB unreachable ({type(e).__name__}); skipping live Protoss integration test"
+        )
     pdb_path.write_text(r.text)
     assert TEST_LIGAND in _hetatm_names(r.text)
 
