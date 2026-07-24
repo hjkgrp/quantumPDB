@@ -172,7 +172,17 @@ def test_fetch_21zq_and_cluster_with_a1e3r(tmpdir):
 
     assert status == "mmcif"
     assert os.path.isfile(pdb_path)
-    assert os.path.isfile(os.path.join(tmpdir, "21ZQ", "21ZQ.cif"))
+    cif_path = os.path.join(tmpdir, "21ZQ", "21ZQ.cif")
+    assert os.path.isfile(cif_path)
+
+    # Compare conversion atom counts rather than a hard-coded golden number
+    # (RCSB entries can be revised over time).
+    n_cif = _cif_atom_count(cif_path)
+    n_pdb = sum(
+        1 for _ in PDBParser(QUIET=True).get_structure("21ZQ", pdb_path).get_atoms()
+    )
+    assert n_pdb == n_cif
+    assert n_pdb > 0
 
     remap = load_remap_sidecar(pdb_path)
     assert remap["resname_map"].get("A1E3R") == "A1E"
