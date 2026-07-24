@@ -5,6 +5,7 @@ import os
 from unittest.mock import MagicMock
 
 import pytest
+import requests
 from Bio.PDB import MMCIFParser, PDBParser
 
 from qp.structure import setup
@@ -141,3 +142,65 @@ def test_center_resname_aliases_from_remap():
     assert normalize_center_key("A1E3R_A302", resname_map) == "A1E_A302"
     assert normalize_center_key("A1E_A302", resname_map) == "A1E_A302"
     assert normalize_center_key("A1E3R_A302", {}) == "A1E3R_A302"
+
+
+def _rcsb_available():
+    try:
+        r = requests.head(
+            "https://files.rcsb.org/download/21ZQ.cif",
+            timeout=15,
+            allow_redirects=True,
+        )
+        return r.status_code == 200
+    except requests.RequestException:
+        return False
+
+
+@pytest.mark.skipif(not _rcsb_available(), reason="RCSB unreachable; skipping 21ZQ integration test")
+def test_fetch_21zq_and_cluster_with_a1e3r(tmpdir):
+    """Live RCSB fetch of mmCIF-only 21ZQ, then cluster around original CCD A1E3R."""
+    import glob
+
+    from qp.cluster.spheres import CenterResidue, extract_clusters
+    from qp.structure.mmcif_to_pdb import load_remap_sidecar
+
+    pdb_path = os.path.join(tmpdir, "21ZQ", "21ZQ.pdb")
+    try:
+        status = setup.fetch_pdb("21ZQ", pdb_path)
+    except (IOError, ValueError) as exc:
+        pytest.skip(f"RCSB fetch failed ({exc}); skipping 21ZQ integration test")
+
+    assert status == "mmcif"
+    assert os.path.isfile(pdb_path)
+    assert os.path.isfile(os.path.join(tmpdir, "21ZQ", "21ZQ.cif"))
+
+    remap = load_remap_sidecar(pdb_path)
+    assert remap["resname_map"].get("A1E3R") == "A1E"
+
+    cluster_out = os.path.join(tmpdir, "clusters")
+    os.makedirs(cluster_out, exist_ok=True)
+    center = CenterResidue("A1E3R", resname_map=remap["resname_map"])
+    cluster_paths = extract_clusters(
+        pdb_path,
+        cluster_out,
+        center,
+        sphere_count=2,
+        first_sphere_radius=4.0,
+        capping=0,
+        charge=False,
+        count=True,
+        xyz=False,
+        smooth_method="dummy_atom",
+        mean_distance=3,
+    )
+
+    assert cluster_paths, "Expected at least one cluster centered on A1E3R/A1E"
+    # A1E3R is residue 302 on chain A after conversion
+    assert any(os.path.basename(p) == "A302" for p in cluster_paths)
+
+    sphere0 = os.path.join(cluster_out, "A302", "0.pdb")
+    assert os.path.isfile(sphere0) and os.path.getsize(sphere0) > 0
+    with open(sphere0) as handle:
+        sphere0_text = handle.read()
+    assert "A1E" in sphere0_text
+    assert glob.glob(os.path.join(cluster_out, "A302", "*.pdb"))
