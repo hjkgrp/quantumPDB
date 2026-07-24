@@ -5,7 +5,7 @@ import os
 from unittest.mock import MagicMock
 
 import pytest
-from Bio.PDB import PDBParser
+from Bio.PDB import MMCIFParser, PDBParser
 
 from qp.structure import setup
 from qp.structure.mmcif_to_pdb import (
@@ -14,16 +14,18 @@ from qp.structure.mmcif_to_pdb import (
     remap_sidecar_path,
 )
 
-# Example lives at the NeuralBioChem workspace root (sibling of src/)
-CIF_21ZQ = os.path.abspath(
-    os.path.join(os.path.dirname(__file__), "..", "..", "..", "..", "21ZQ.cif")
-)
+# Small in-repo fixture (includes a 5-letter CCD residue for remap coverage)
+CIF_MINI = os.path.join(os.path.dirname(__file__), "data", "mini_mmcif.cif")
 
 
-@pytest.mark.skipif(not os.path.isfile(CIF_21ZQ), reason="21ZQ.cif example not found")
-def test_convert_21zq_mmcif(tmpdir):
-    out = os.path.join(tmpdir, "21ZQ.pdb")
-    info = convert_mmcif_to_pdb(CIF_21ZQ, out)
+def _cif_atom_count(cif_path):
+    structure = MMCIFParser(QUIET=True).get_structure("cif", cif_path)
+    return sum(1 for _ in structure.get_atoms())
+
+
+def test_convert_mini_mmcif(tmpdir):
+    out = os.path.join(tmpdir, "mini.pdb")
+    info = convert_mmcif_to_pdb(CIF_MINI, out)
 
     assert os.path.isfile(out)
     assert os.path.getsize(out) > 0
@@ -36,9 +38,10 @@ def test_convert_21zq_mmcif(tmpdir):
         sidecar_data = json.load(handle)
     assert sidecar_data["resname_map"]["A1E3R"] == info["resname_map"]["A1E3R"]
 
-    structure = PDBParser(QUIET=True).get_structure("21ZQ", out)
+    structure = PDBParser(QUIET=True).get_structure("mini", out)
     n_atoms = sum(1 for _ in structure.get_atoms())
-    assert n_atoms == 4168
+    assert n_atoms == _cif_atom_count(CIF_MINI)
+    assert n_atoms > 0
 
     for residue in structure.get_residues():
         assert len(residue.resname) <= 3
@@ -68,22 +71,16 @@ def test_get_pdbs_accepts_cif(tmpdir):
 
 
 def test_ensure_structure_pdb_converts_local_cif(tmpdir):
-    if not os.path.isfile(CIF_21ZQ):
-        pytest.skip("21ZQ.cif example not found")
-
-    pdb_path = os.path.join(tmpdir, "21ZQ", "21ZQ.pdb")
-    status = setup.ensure_structure_pdb("21ZQ", pdb_path, source_cif=CIF_21ZQ)
+    pdb_path = os.path.join(tmpdir, "mini", "mini.pdb")
+    status = setup.ensure_structure_pdb("mini", pdb_path, source_cif=CIF_MINI)
     assert status == "converted"
     assert os.path.isfile(pdb_path)
-    assert setup.ensure_structure_pdb("21ZQ", pdb_path, source_cif=CIF_21ZQ) == "exists"
+    assert setup.ensure_structure_pdb("mini", pdb_path, source_cif=CIF_MINI) == "exists"
 
 
 def test_fetch_pdb_mmcif_fallback(tmpdir, monkeypatch):
     """When classic PDB 404s, fetch mmCIF and convert."""
-    if not os.path.isfile(CIF_21ZQ):
-        pytest.skip("21ZQ.cif example not found")
-
-    with open(CIF_21ZQ) as handle:
+    with open(CIF_MINI) as handle:
         cif_text = handle.read()
 
     def fake_get(url, timeout=30):
@@ -100,13 +97,13 @@ def test_fetch_pdb_mmcif_fallback(tmpdir, monkeypatch):
         return response
 
     monkeypatch.setattr(setup.requests, "get", fake_get)
-    out = os.path.join(tmpdir, "21ZQ", "21ZQ.pdb")
-    status = setup.fetch_pdb("21ZQ", out)
+    out = os.path.join(tmpdir, "mini", "mini.pdb")
+    status = setup.fetch_pdb("mini", out)
     assert status == "mmcif"
     assert os.path.isfile(out)
-    assert os.path.isfile(os.path.join(tmpdir, "21ZQ", "21ZQ.cif"))
-    structure = PDBParser(QUIET=True).get_structure("21ZQ", out)
-    assert sum(1 for _ in structure.get_atoms()) == 4168
+    assert os.path.isfile(os.path.join(tmpdir, "mini", "mini.cif"))
+    structure = PDBParser(QUIET=True).get_structure("mini", out)
+    assert sum(1 for _ in structure.get_atoms()) == _cif_atom_count(CIF_MINI)
 
 
 def test_fetch_pdb_invalid_id(tmpdir, monkeypatch):
@@ -124,13 +121,10 @@ def test_fetch_pdb_invalid_id(tmpdir, monkeypatch):
 
 def test_oversized_structure_raises(tmpdir, monkeypatch):
     """Oversized conversions raise OversizedStructureError for batch skip handling."""
-    if not os.path.isfile(CIF_21ZQ):
-        pytest.skip("21ZQ.cif example not found")
-
     monkeypatch.setattr("qp.structure.mmcif_to_pdb.MAX_PDB_ATOMS", 1)
     out = os.path.join(tmpdir, "too_big.pdb")
     with pytest.raises(OversizedStructureError, match="atoms"):
-        convert_mmcif_to_pdb(CIF_21ZQ, out)
+        convert_mmcif_to_pdb(CIF_MINI, out)
     assert not os.path.isfile(out)
 
 
