@@ -6,7 +6,7 @@ import sys
 import yaml
 import requests
 
-from qp.structure.mmcif_to_pdb import convert_mmcif_to_pdb
+from qp.structure.mmcif_to_pdb import OversizedStructureError, convert_mmcif_to_pdb
 
 
 def read_config(config_file):

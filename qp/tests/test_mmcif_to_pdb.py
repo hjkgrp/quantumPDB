@@ -8,7 +8,11 @@ import pytest
 from Bio.PDB import PDBParser
 
 from qp.structure import setup
-from qp.structure.mmcif_to_pdb import convert_mmcif_to_pdb, remap_sidecar_path
+from qp.structure.mmcif_to_pdb import (
+    OversizedStructureError,
+    convert_mmcif_to_pdb,
+    remap_sidecar_path,
+)
 
 # Example lives at the NeuralBioChem workspace root (sibling of src/)
 CIF_21ZQ = os.path.abspath(
@@ -116,3 +120,15 @@ def test_fetch_pdb_invalid_id(tmpdir, monkeypatch):
     out = os.path.join(tmpdir, "XXXX.pdb")
     with pytest.raises(ValueError, match="XXXX"):
         setup.fetch_pdb("XXXX", out)
+
+
+def test_oversized_structure_raises(tmpdir, monkeypatch):
+    """Oversized conversions raise OversizedStructureError for batch skip handling."""
+    if not os.path.isfile(CIF_21ZQ):
+        pytest.skip("21ZQ.cif example not found")
+
+    monkeypatch.setattr("qp.structure.mmcif_to_pdb.MAX_PDB_ATOMS", 1)
+    out = os.path.join(tmpdir, "too_big.pdb")
+    with pytest.raises(OversizedStructureError, match="atoms"):
+        convert_mmcif_to_pdb(CIF_21ZQ, out)
+    assert not os.path.isfile(out)

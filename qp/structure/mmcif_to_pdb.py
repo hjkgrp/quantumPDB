@@ -32,6 +32,13 @@ CHAIN_ALPHABET = string.ascii_uppercase + string.ascii_lowercase + string.digits
 RESNAME_ALPHABET = string.ascii_uppercase + string.digits
 
 
+class OversizedStructureError(ValueError):
+    """Raised when a structure cannot fit classic PDB size limits.
+
+    Batch runs should catch this, warn, and skip the entry rather than abort.
+    """
+
+
 def convert_mmcif_to_pdb(cif_path: str, pdb_path: str) -> dict:
     """Convert an mmCIF file to a classic PDB file with format sanitization.
 
@@ -50,9 +57,10 @@ def convert_mmcif_to_pdb(cif_path: str, pdb_path: str) -> dict:
 
     Raises
     ------
+    OversizedStructureError
+        If the structure exceeds classic PDB atom/chain limits after sanitization.
     ValueError
-        If the structure cannot fit classic PDB limits after sanitization,
-        or if the written PDB fails smoke re-parse.
+        If the written PDB fails smoke re-parse.
     PDBIOException
         If Bio.PDB cannot write the structure.
     """
@@ -70,14 +78,14 @@ def convert_mmcif_to_pdb(cif_path: str, pdb_path: str) -> dict:
     remap_info = _sanitize_structure(structure)
     n_atoms = sum(1 for _ in structure.get_atoms())
     if n_atoms > MAX_PDB_ATOMS:
-        raise ValueError(
+        raise OversizedStructureError(
             f"Structure has {n_atoms} atoms; classic PDB supports at most "
             f"{MAX_PDB_ATOMS}. Native mmCIF support is required."
         )
 
     n_chains = _count_chains(structure)
     if n_chains > MAX_PDB_CHAINS:
-        raise ValueError(
+        raise OversizedStructureError(
             f"Structure has {n_chains} chains; classic PDB supports at most "
             f"{MAX_PDB_CHAINS}. Native mmCIF support is required."
         )
@@ -171,7 +179,7 @@ def _allocate_chain_id(used: set) -> str:
     for candidate in CHAIN_ALPHABET:
         if candidate not in used:
             return candidate
-    raise ValueError(
+    raise OversizedStructureError(
         f"Cannot allocate a single-character chain ID; classic PDB supports "
         f"at most {MAX_PDB_CHAINS} chains."
     )

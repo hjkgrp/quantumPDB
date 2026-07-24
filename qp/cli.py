@@ -120,15 +120,30 @@ def run(config):
                     click.echo("> Fetching structure file")
                 try:
                     setup.ensure_structure_pdb(pdb, path, source_cif=source_cif)
+                except setup.OversizedStructureError as e:
+                    # Skip oversized mmCIF conversions; keep batch running
+                    click.secho(
+                        f"> Warning: skipping oversized structure {pdb.upper()}: {e}\n",
+                        italic=True,
+                        fg="yellow",
+                    )
+                    err["PDB"].append(pdb)
+                    if center_residues:
+                        center_residues.pop(0)
+                    continue
                 except ValueError as e:
                     # Catches invalid PDB ID / conversion failures
                     click.secho(f"> Error: {e}\n", italic=True, fg="red")
                     err["PDB"].append(pdb)
+                    if center_residues:
+                        center_residues.pop(0)
                     continue
                 except IOError as e:
                     # Catches network and server issues
                     click.secho(f"> Error: A server or network issue occurred. {e}\n", italic=True, fg="red")
                     err["PDB"].append(pdb)
+                    if center_residues:
+                        center_residues.pop(0)
                     continue
             
             # Extract the current center residue from the list of all residues
