@@ -132,3 +132,18 @@ def test_oversized_structure_raises(tmpdir, monkeypatch):
     with pytest.raises(OversizedStructureError, match="atoms"):
         convert_mmcif_to_pdb(CIF_21ZQ, out)
     assert not os.path.isfile(out)
+
+
+def test_center_resname_aliases_from_remap():
+    """Original 5-letter CCD codes expand to mapped names for center matching."""
+    from qp.structure.mmcif_to_pdb import (
+        expand_resnames_for_matching,
+        normalize_center_key,
+    )
+
+    resname_map = {"A1E3R": "A1E"}
+    assert expand_resnames_for_matching(["A1E3R"], resname_map) == {"A1E3R", "A1E"}
+    assert expand_resnames_for_matching(["A1E"], resname_map) == {"A1E"}
+    assert normalize_center_key("A1E3R_A302", resname_map) == "A1E_A302"
+    assert normalize_center_key("A1E_A302", resname_map) == "A1E_A302"
+    assert normalize_center_key("A1E3R_A302", {}) == "A1E3R_A302"

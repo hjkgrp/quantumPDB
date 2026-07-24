@@ -148,8 +148,18 @@ def run(config):
             
             # Extract the current center residue from the list of all residues
             from qp.cluster.spheres import CenterResidue
-            center_residue = CenterResidue(center_residues.pop(0))
+            from qp.structure.mmcif_to_pdb import load_remap_sidecar
+            # Allow center specs to use original mmCIF residue names (e.g. 5-letter CCD)
+            remap = load_remap_sidecar(path)
+            center_residue = CenterResidue(
+                center_residues.pop(0),
+                resname_map=remap.get("resname_map"),
+            )
             click.echo(f"> Using center residue: {center_residue}")
+            if remap.get("resname_map"):
+                click.echo(
+                    f"> mmCIF resname remap available for center matching: {remap['resname_map']}"
+                )
             
             residues_with_clashes = [] # Start by assuming no protoss clashes
             for i in range(max_clash_refinement_iter):

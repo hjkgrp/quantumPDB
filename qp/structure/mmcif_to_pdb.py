@@ -266,3 +266,79 @@ def remap_sidecar_path(pdb_path: str) -> str:
     """Return the expected remap sidecar path for a converted PDB."""
     stem, _ = os.path.splitext(os.path.abspath(pdb_path))
     return f"{stem}_mmcif_remap.json"
+
+
+def load_remap_sidecar(pdb_path: str) -> dict:
+    """Load mmCIF remap metadata next to a PDB, if present.
+
+    Parameters
+    ----------
+    pdb_path : str
+        Path to the classic PDB (sidecar is ``{stem}_mmcif_remap.json``).
+
+    Returns
+    -------
+    dict
+        Remap dict with at least ``resname_map`` and ``chain_map`` keys.
+        Missing sidecars yield empty maps.
+    """
+    sidecar = remap_sidecar_path(pdb_path)
+    if not os.path.isfile(sidecar):
+        return {"resname_map": {}, "chain_map": {}, "warnings": []}
+    with open(sidecar, "r") as handle:
+        data = json.load(handle)
+    return {
+        "resname_map": dict(data.get("resname_map") or {}),
+        "chain_map": dict(data.get("chain_map") or {}),
+        "warnings": list(data.get("warnings") or []),
+    }
+
+
+def expand_resnames_for_matching(names, resname_map=None) -> set:
+    """Expand center resname tokens with mmCIF→PDB remap aliases.
+
+    Parameters
+    ----------
+    names : iterable of str
+        Center residue name tokens (fuzzy mode).
+    resname_map : dict, optional
+        ``{original_name: mapped_name}`` from a remap sidecar.
+
+    Returns
+    -------
+    set of str
+        Names that should be compared against ``Residue.get_resname()``.
+    """
+    resname_map = resname_map or {}
+    expanded = set()
+    for name in names:
+        expanded.add(name)
+        mapped = resname_map.get(name)
+        if mapped:
+            expanded.add(mapped)
+    return expanded
+
+
+def normalize_center_key(key: str, resname_map=None) -> str:
+    """Rewrite a strict ``RESNAME_CHAINSEQ`` center key through ``resname_map``.
+
+    Parameters
+    ----------
+    key : str
+        Strict center token such as ``A1E3R_A302``.
+    resname_map : dict, optional
+        ``{original_name: mapped_name}`` from a remap sidecar.
+
+    Returns
+    -------
+    str
+        Key using the mapped residue name when available.
+    """
+    resname_map = resname_map or {}
+    if "_" not in key:
+        return key
+    resname, rest = key.split("_", 1)
+    mapped = resname_map.get(resname)
+    if mapped:
+        resname = mapped
+    return f"{resname}_{rest}"

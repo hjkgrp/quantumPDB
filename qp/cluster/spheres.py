@@ -32,12 +32,13 @@ from Bio.PDB.NeighborSearch import NeighborSearch
 from scipy.spatial import Voronoi
 from qp.cluster import struct_to_file
 from sklearn.cluster import DBSCAN
+from qp.structure.mmcif_to_pdb import expand_resnames_for_matching, normalize_center_key
 
 
 RANDOM_SEED = 66265
 
 class CenterResidue:
-    def __init__(self, center_residue: str):
+    def __init__(self, center_residue: str, resname_map=None):
         """Parse a center residue definition string.
 
         If the string contains dashes (e.g., ``'CU_A357-CU_A358'``), strict
@@ -46,12 +47,21 @@ class CenterResidue:
         and underscore-separated tokens are matched against HETATM residue
         names.
 
+        When ``resname_map`` is provided (from an mmCIF→PDB remap sidecar),
+        original longer residue names (e.g. 5-letter CCD codes) are also
+        accepted and matched against the remapped 3-letter names present in
+        the structure. Other pipeline stages that use resnames are unchanged.
+
         Parameters
         ----------
         center_residue : str
             Center definition string from the config or CSV input.
+        resname_map : dict, optional
+            Mapping of original residue names → PDB residue names
+            (``{original: mapped}``), typically from ``*_mmcif_remap.json``.
         """
         self.center_residue_str = center_residue
+        self.resname_map = dict(resname_map or {})
         residue_list = center_residue.split("-")
         if len(residue_list) == 1:
             self.mode = "fuzzy"
@@ -66,11 +76,21 @@ class CenterResidue:
     def __repr__(self):
         return self.center_residue_str
 
+    def _structure_resnames(self):
+        """Residue names that should match structure ``get_resname()`` values."""
+        return expand_resnames_for_matching(self.residue_list, self.resname_map)
+
+    def _normalize_strict_key(self, key: str) -> str:
+        """Rewrite a strict center key through ``resname_map`` when needed."""
+        return normalize_center_key(key, self.resname_map)
+
     def __contains__(self, res: Residue):
         """Test whether a residue matches this center definition.
 
         In fuzzy mode, matches any HETATM residue whose name appears in the
-        residue list. In strict mode, matches by exact ``RESNAME_CHAINID`` key.
+        residue list (or maps to that name via ``resname_map``). In strict
+        mode, matches by exact ``RESNAME_CHAINID`` key, accepting original
+        mmCIF residue names when a remap is available.
 
         Parameters
         ----------
@@ -82,9 +102,11 @@ class CenterResidue:
         bool
         """
         if self.mode == "fuzzy":
-            return res.get_resname() in self.residue_list and res.id[0] != ' '
+            return res.get_resname() in self._structure_resnames() and res.id[0] != ' '
         elif self.mode == "strict":
-            return make_res_key(res) in self.residue_list
+            key = make_res_key(res)
+            allowed = {self._normalize_strict_key(tok) for tok in self.residue_list}
+            return key in allowed
 
 
 def get_grid_coord_idx(coord, coord_min, mean_distance):

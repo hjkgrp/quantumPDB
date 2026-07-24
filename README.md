@@ -128,7 +128,7 @@ git stash drop
 git pull
 ```
 ## 6. Areas of active development
-Currently working on handling all edge cases, including non-canonical amino acids. Temporary mmCIF support is available via `qp.structure.mmcif_to_pdb`: local `.cif`/`.mmcif` inputs and RCSB entries without a classic PDB file are converted to `{id}.pdb` before Modeller/Protoss/clustering. Multi-character chain IDs and >3-character residue names are remapped (see `{id}_mmcif_remap.json`); structures that exceed classic PDB limits (>99999 atoms or >62 chains) are skipped with a warning in batch runs. Native mmCIF handling for larger entries is still planned. Documentation is present for all functions in the code, but should be added with external examples for use. 
+Currently working on handling all edge cases, including non-canonical amino acids. Temporary mmCIF support is available via `qp.structure.mmcif_to_pdb`: local `.cif`/`.mmcif` inputs and RCSB entries without a classic PDB file are converted to `{id}.pdb` before Modeller/Protoss/clustering. Multi-character chain IDs and >3-character residue names are remapped (see `{id}_mmcif_remap.json`); structures that exceed classic PDB limits (>99999 atoms or >62 chains) are skipped with a warning in batch runs. Center-residue selection accepts either the original or remapped residue names when a remap sidecar is present. Native mmCIF handling for larger entries is still planned. Documentation is present for all functions in the code, but should be added with external examples for use. 
 
 ## 7. QuantumPDB generated file structure
 An example file structure from a `qp` run given the parameters in `config.yaml` `input: qp_input.csv` and `output_dir: dataset/`.
