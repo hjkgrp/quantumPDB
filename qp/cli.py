@@ -106,19 +106,22 @@ def run(config):
         if capping or charge:
             protoss = True
 
-    for pdb, path in pdb_all:
+    for pdb, path, source_cif in pdb_all:
         try:
             click.secho("╔══════╗", bold=True)
             click.secho(f"║ {pdb.upper()} ║", bold=True)
             click.secho("╚══════╝", bold=True)
 
-            # Skips fetching if PDB file exists
+            # Fetch classic PDB, or convert local/RCSB mmCIF when needed
             if not os.path.isfile(path):
-                click.echo(f"> Fetching PDB file")
+                if source_cif:
+                    click.echo("> Preparing structure from local mmCIF")
+                else:
+                    click.echo("> Fetching structure file")
                 try:
-                    setup.fetch_pdb(pdb, path)
+                    setup.ensure_structure_pdb(pdb, path, source_cif=source_cif)
                 except ValueError as e:
-                    # Catches invalid PDB ID
+                    # Catches invalid PDB ID / conversion failures
                     click.secho(f"> Error: {e}\n", italic=True, fg="red")
                     err["PDB"].append(pdb)
                     continue
