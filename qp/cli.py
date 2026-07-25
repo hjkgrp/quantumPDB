@@ -77,10 +77,12 @@ def run(config):
     center_yaml_residues = config_data.get('center_residues', [])
     pdb_all, center_residues = setup.parse_input(input, output, center_yaml_residues)
 
-    if modeller:
+    if modeller or protoss:
+        # Protoss clash parsing also needs the residue table from missing
         from qp.structure import missing
+    if modeller:
         optimize = config_data.get('optimize_select_residues', 1)
-        convert_to_nhie_oxo = config_data.get('convert_to_nhie_oxo', False)
+    convert_to_nhie_oxo = config_data.get('convert_to_nhie_oxo', False)
     if protoss:
         from qp.protonate import get_protoss, fix
     if coordination:
@@ -282,7 +284,8 @@ def run(config):
             if protoss:
                 # Check if any atoms changed from HETATM to ATOM or vice versa for future troubleshooting purposes
                 from qp.protonate.parse_output import record_type
-                changed_residues = record_type(mod_path, protoss_pdb) # I want to do something with this eventually
+                reference_for_record_type = mod_path if modeller else path
+                changed_residues = record_type(reference_for_record_type, protoss_pdb) # I want to do something with this eventually
 
                 path = f"{prot_path}/{pdb}_protoss.pdb"
                 old_path = f"{prot_path}/{pdb}_protoss_orig.pdb"
