@@ -2,7 +2,7 @@ input: [1sp9]
 output_dir: qp/tests/samples
 modeller: false
 protoss: false
-find_backbone_atoms:true
+find_backbone_atoms: true
 coordination: true
 skip: all
 optimize_select_residues: 1
