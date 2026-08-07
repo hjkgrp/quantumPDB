@@ -75,7 +75,10 @@ def run(config):
     input = config_data.get('input', [])
     output = config_data.get('output_dir', '')
     center_yaml_residues = config_data.get('center_residues', [])
-    pdb_all, center_residues = setup.parse_input(input, output, center_yaml_residues)
+    force_include_yaml_residues = config_data.get('force_include_residues', [])
+    pdb_all, center_residues, force_include_residues_all = setup.parse_input(
+        input, output, center_yaml_residues, force_include_yaml_residues
+    )
 
     if modeller:
         from qp.structure import missing
@@ -130,6 +133,8 @@ def run(config):
                     err["PDB"].append(pdb)
                     if center_residues:
                         center_residues.pop(0)
+                    if force_include_residues_all:
+                        force_include_residues_all.pop(0)
                     continue
                 except ValueError as e:
                     # Catches invalid PDB ID / conversion failures
@@ -137,6 +142,8 @@ def run(config):
                     err["PDB"].append(pdb)
                     if center_residues:
                         center_residues.pop(0)
+                    if force_include_residues_all:
+                        force_include_residues_all.pop(0)
                     continue
                 except IOError as e:
                     # Catches network and server issues
@@ -144,6 +151,8 @@ def run(config):
                     err["PDB"].append(pdb)
                     if center_residues:
                         center_residues.pop(0)
+                    if force_include_residues_all:
+                        force_include_residues_all.pop(0)
                     continue
             
             # Extract the current center residue from the list of all residues
@@ -155,6 +164,7 @@ def run(config):
                 center_residues.pop(0),
                 resname_map=remap.get("resname_map"),
             )
+            force_include_residues = force_include_residues_all.pop(0) if force_include_residues_all else []
             click.echo(f"> Using center residue: {center_residue}")
             if remap.get("resname_map"):
                 click.echo(
@@ -300,10 +310,11 @@ def run(config):
                 else:
                     ligand_charge = dict()
                 cluster_paths = spheres.extract_clusters(
-                    path, f"{output}/{pdb}", center_residue, sphere_count, 
+                    path, f"{output}/{pdb}", center_residue, sphere_count,
                     first_sphere_radius, max_atom_count, merge_cutoff, smooth_method,
                     ligands, capping, charge, ligand_charge, count, xyz, hetero_pdb, include_ligands,
                     cluster_name_template=cluster_name_template,
+                    force_include_residues=force_include_residues,
                     **smooth_params
                 )
 
@@ -408,8 +419,8 @@ def analyze(config):
     input = config_data.get('input', [])
     output = config_data.get('output_dir', '')
     center_yaml_residues = config_data.get('center_residues', [])
-    pdb_all, center_residues = setup.parse_input(input, output, center_yaml_residues)
-    
+    pdb_all, center_residues, _ = setup.parse_input(input, output, center_yaml_residues)
+
     if job_checkup:
         from qp.analyze import checkup
         click.echo("> Checking to see the status of the jobs...")

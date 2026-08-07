@@ -29,6 +29,21 @@ def check_clusters(path, out, metal_ids):
     assert filecmp.cmp(expected_count, output_count), "Residue count does not match expected"
 
 
+def residue_atom_lines(pdb_path, resname, chain, resnum):
+    """Return the ATOM/HETATM lines for one residue in a PDB file."""
+    lines = []
+    with open(pdb_path) as f:
+        for line in f:
+            if (
+                line.startswith(("ATOM", "HETATM"))
+                and line[17:20].strip() == resname
+                and line[21].strip() == chain
+                and int(line[22:26]) == resnum
+            ):
+                lines.append(line)
+    return lines
+
+
 @pytest.mark.parametrize("sample_cluster", [
     ("1sp9", ("A446", "B446")),
     ("2q4a", ("A901", "B902")),
@@ -108,6 +123,127 @@ def test_prune_atoms(tmpdir, sample_cluster):
         smooth_method="dummy_atom", mean_distance=3
     )
     check_clusters(path, tmpdir, metal_ids)
+
+
+def test_force_include_residues(tmpdir):
+    """force_include_residues should force-include a residue outside the
+    default spheres, cap it like any other extracted residue, and protect
+    it from max_atom_count pruning.
+
+    Note: unlike the other tests in this file, this constructs a real
+    CenterResidue (the current extract_clusters API) rather than passing a
+    plain resname list.
+    """
+    from qp.cluster.spheres import CenterResidue
+
+    path = os.path.join(os.path.dirname(__file__), "samples", "3a8g")
+    pdb_path = os.path.join(path, "Protoss", "3a8g_protoss.pdb")
+    center_residue = CenterResidue("FE")
+
+    def cluster_pdb(out):
+        return os.path.join(out, "A301", "A301.pdb")
+
+    # GLU_A9 is not reached by sphere growth (confirmed against the golden
+    # 3a8g/A301 spheres, which only cover residues near the active site)
+    baseline = tmpdir.mkdir("baseline")
+    spheres.extract_clusters(
+        pdb_path, str(baseline), center_residue,
+        smooth_method="dummy_atom", mean_distance=3
+    )
+    assert not residue_atom_lines(cluster_pdb(str(baseline)), "GLU", "A", 9)
+
+    # force_include_residues should force it in and cap it
+    added = tmpdir.mkdir("added")
+    spheres.extract_clusters(
+        pdb_path, str(added), center_residue,
+        smooth_method="dummy_atom", mean_distance=3,
+        force_include_residues=["GLU_A9"]
+    )
+    added_lines = residue_atom_lines(cluster_pdb(str(added)), "GLU", "A", 9)
+    source_lines = residue_atom_lines(pdb_path, "GLU", "A", 9)
+    assert added_lines, "GLU_A9 was not added to the cluster"
+    assert len(added_lines) > len(source_lines), "GLU_A9 was not capped"
+
+    # Protected from max_atom_count pruning, even though it's one of the
+    # most distant residues from the active site and would normally be
+    # pruned first
+    pruned = tmpdir.mkdir("pruned")
+    spheres.extract_clusters(
+        pdb_path, str(pruned), center_residue,
+        smooth_method="dummy_atom", mean_distance=3,
+        force_include_residues=["GLU_A9"], max_atom_count=60
+    )
+    assert residue_atom_lines(cluster_pdb(str(pruned)), "GLU", "A", 9), (
+        "GLU_A9 was pruned despite being explicitly requested"
+    )
+
+
+def test_force_include_residues_multiple(tmpdir):
+    """force_include_residues should support force-including more than one
+    residue at once, spanning different chains."""
+    from qp.cluster.spheres import CenterResidue
+
+    path = os.path.join(os.path.dirname(__file__), "samples", "3a8g")
+    pdb_path = os.path.join(path, "Protoss", "3a8g_protoss.pdb")
+    center_residue = CenterResidue("FE")
+
+    def cluster_pdb(out):
+        return os.path.join(out, "A301", "A301.pdb")
+
+    # Both are absent from the default spheres (same reasoning as
+    # test_force_include_residues), one on each chain
+    residues_to_add = [("GLU", "A", 9), ("GLY", "B", 3)]
+
+    added = tmpdir.mkdir("added")
+    spheres.extract_clusters(
+        pdb_path, str(added), center_residue,
+        smooth_method="dummy_atom", mean_distance=3,
+        force_include_residues=[f"{resname}_{chain}{resnum}" for resname, chain, resnum in residues_to_add]
+    )
+
+    for resname, chain, resnum in residues_to_add:
+        added_lines = residue_atom_lines(cluster_pdb(str(added)), resname, chain, resnum)
+        source_lines = residue_atom_lines(pdb_path, resname, chain, resnum)
+        assert added_lines, f"{resname}_{chain}{resnum} was not added to the cluster"
+        assert len(added_lines) > len(source_lines), f"{resname}_{chain}{resnum} was not capped"
+
+
+def test_force_include_residues_already_present(tmpdir):
+    """force_include_residues should not write a residue twice when it's
+    already part of the cluster via normal sphere growth."""
+    from qp.cluster.spheres import CenterResidue
+
+    path = os.path.join(os.path.dirname(__file__), "samples", "3a8g")
+    pdb_path = os.path.join(path, "Protoss", "3a8g_protoss.pdb")
+    center_residue = CenterResidue("FE")
+
+    def cluster_pdb(out):
+        return os.path.join(out, "A301", "A301.pdb")
+
+    # ALA_A113 is already part of the default sphere 1 (confirmed against
+    # the golden 3a8g/A301/1.pdb), flanked on both sides by residues that
+    # are also already in the cluster, so it isn't even capped -- any
+    # atom-count change here can only come from duplicate writing
+    baseline = tmpdir.mkdir("baseline")
+    spheres.extract_clusters(
+        pdb_path, str(baseline), center_residue,
+        smooth_method="dummy_atom", mean_distance=3
+    )
+    baseline_lines = residue_atom_lines(cluster_pdb(str(baseline)), "ALA", "A", 113)
+    assert baseline_lines, "test setup assumption broken: ALA_A113 should already be in the default cluster"
+
+    forced = tmpdir.mkdir("forced")
+    spheres.extract_clusters(
+        pdb_path, str(forced), center_residue,
+        smooth_method="dummy_atom", mean_distance=3,
+        force_include_residues=["ALA_A113"]
+    )
+    forced_lines = residue_atom_lines(cluster_pdb(str(forced)), "ALA", "A", 113)
+
+    assert len(forced_lines) == len(baseline_lines), (
+        "ALA_A113 was written a different number of times when force-included "
+        "despite already being part of the cluster (expected no duplication)"
+    )
 
 
 @pytest.mark.parametrize("sample_cluster", [

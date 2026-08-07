@@ -74,6 +74,14 @@ cluster extraction).
      - List of three-letter residue codes to force into the first interaction
        sphere (e.g., ``[AKG, SIN]``). These residues are also protected from
        pruning.
+   * - ``force_include_residues``
+     - ``[]``
+     - List of specific protein residues to force-include, even if they lie
+       beyond the grown spheres, given as ``RESNAME_CHAINID`` keys (e.g.,
+       ``[HIS_A123]``). Added residues are capped like any other extracted
+       residue and protected from ``max_atom_count`` pruning. Can also be
+       set per PDB via an ``force_include_residues`` CSV column, which takes
+       priority over this YAML list when present. See :doc:`input_formats`.
    * - ``number_of_spheres``
      - ``2``
      - Number of interaction spheres to construct. More spheres capture more

@@ -13,6 +13,7 @@ max_atom_count: ~
 merge_distance_cutoff: 0.0
 smoothing_method: 2
 additional_ligands: []
+force_include_residues: []
 capping_method: 1
 
 compute_charges: true

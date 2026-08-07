@@ -51,6 +51,9 @@ when processing many structures or when per-PDB parameters are needed.
 
 - ``center`` --- Center residue definition for this specific PDB (overrides
   the ``center_residues`` parameter in the YAML config)
+- ``force_include_residues`` --- Specific protein residues to force-include for
+  this PDB (overrides the ``force_include_residues`` parameter in the YAML
+  config). See :ref:`force-include-residues-syntax`.
 - ``oxidation`` --- Metal oxidation state (required for ``qp submit``)
 - ``multiplicity`` --- Spin multiplicity (required for ``qp submit``)
 
@@ -58,10 +61,10 @@ when processing many structures or when per-PDB parameters are needed.
 
 .. code-block:: text
 
-   pdb_id,center,oxidation,multiplicity
-   1OS7,FE,3,6
-   1FYZ,FE2_A5001-FE2_A5002,6,11
-   1PHM,CU_A357-CU_A358,4,3
+   pdb_id,center,force_include_residues,oxidation,multiplicity
+   1OS7,FE,HIS_A123,3,6
+   1FYZ,FE2_A5001-FE2_A5002,,6,11
+   1PHM,CU_A357-CU_A358,HIS_A93-GLU_A45,4,3
 
 Center Residue Syntax
 ---------------------
@@ -138,6 +141,44 @@ Set the cutoff slightly larger than the metal--metal distance. Examples:
 
 - **MMO diiron** (Fe--Fe ~3.4 Å): ``merge_distance_cutoff: 4.0``
 - **PHM dicopper** (Cu--Cu ~11 Å): ``merge_distance_cutoff: 12.0``
+
+.. _force-include-residues-syntax:
+
+Force-Include Residues Syntax
+------------------------------
+
+``force_include_residues`` force-includes specific protein residues in the QM
+cluster, even if they lie beyond the grown coordination spheres. Unlike
+``additional_ligands`` (which matches by residue name), each entry must
+identify one exact residue with the same ``RESNAME_CHAINID`` format used for
+specific-mode centers (e.g. ``HIS_A123``), since a resname like ``HIS``
+alone can't distinguish which occurrence to include.
+
+YAML Format (``force_include_residues``)
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Use YAML list syntax, one ``RESNAME_CHAINID`` token per residue:
+
+.. code-block:: yaml
+
+   force_include_residues: [HIS_A123, GLU_A45]
+
+Applied identically to every PDB in the run — most useful for a
+single-structure run, since chain/residue numbers are structure-specific.
+
+CSV Format (``force_include_residues`` column)
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+A CSV cell can't hold a YAML list, so multiple residues are dash-separated
+within the cell instead, as shown in the example CSV above (e.g.
+``HIS_A93-GLU_A45``). Leave the cell blank for PDBs with no force-included
+residues.
+
+.. important::
+
+   When both ``force_include_residues`` (YAML) and a ``force_include_residues``
+   column (CSV) are provided, the **CSV value takes priority** for every PDB
+   in the run, exactly like ``center``/``center_residues``.
 
 Configuration File Structure
 -----------------------------

@@ -9,7 +9,8 @@
     ...     "path/to/out/dir/", 
     ...     center_residues=["FE", "FE2"], # List of resnames of the residues to use as the cluster center
     ...     sphere_count=2,              # Number of spheres to extract
-    ...     ligands=["AKG"]       # PDB IDs of additional ligands
+    ...     ligands=["AKG"],       # PDB IDs of additional ligands
+    ...     force_include_residues=["HIS_A123"] # Specific protein residues to force-include
     ... )
 
 Extracting clusters leaves open valences in the outermost sphere. Capping may be
@@ -570,7 +571,7 @@ def get_next_neighbors(
     return "_".join(sorted(metal_id)), seen, spheres
 
 
-def prune_atoms(center, residues, spheres, max_atom_count, ligands):
+def prune_atoms(center, residues, spheres, max_atom_count, ligands, protected_residues=frozenset()):
     """Prune residues from the cluster to meet the max atom count constraint.
 
     Removes residues furthest from the center first, while preserving
@@ -589,6 +590,10 @@ def prune_atoms(center, residues, spheres, max_atom_count, ligands):
         Maximum allowed total atom count in the cluster.
     ligands : list
         Ligand residue names to preserve regardless of distance.
+    protected_residues : set, optional
+        Specific residues (e.g. from ``force_include_residues``) to preserve
+        regardless of distance, matched by identity rather than resname
+        (default frozenset()).
 
     Notes
     -----
@@ -607,11 +612,11 @@ def prune_atoms(center, residues, spheres, max_atom_count, ligands):
         center_atoms.extend(c.get_unpacked_list())
     def dist(res):
         return min(atom - x for x in center_atoms for atom in res.get_unpacked_list())
-                   
+
     prune = set()
     for res in sorted(residues, key=dist, reverse=True):
-        # Check if the residue is in the ligands_to_keep list
-        if res.get_resname() not in ligands:
+        # Check if the residue is in the ligands_to_keep list or explicitly protected
+        if res.get_resname() not in ligands and res not in protected_residues:
             prune.add(res)
             atom_cnt -= len(res)
             if atom_cnt <= max_atom_count:
@@ -1157,6 +1162,54 @@ def complete_oligomer(ligand_keys, model, residues, spheres, include_ligands):
                     print(f"To avoid unpredictable charge error, {res_key} in {oligomer} is added to spheres")
 
 
+def add_force_include_residues(model, residues, spheres, force_include_residues):
+    """Force-include specific protein residues, even beyond the grown spheres.
+
+    Unlike the sphere-growth logic in ``get_next_neighbors``, this does not
+    rely on distance cutoffs or Voronoi adjacency — it matches each entry
+    directly against every residue in the model, so residues that are
+    structurally or functionally relevant but were never reached by sphere
+    growth (e.g. a distal second-shell residue) can still be included.
+
+    Parameters
+    ----------
+    model : Bio.PDB.Model.Model
+        Full protein structure model.
+    residues : set
+        Current set of extracted residues (modified in place).
+    spheres : list of set
+        Sphere-separated residue sets; matches are added to the outermost
+        sphere (modified in place).
+    force_include_residues : list of str
+        Residue keys to force-include, in ``'RESNAME_CHAINID'`` format
+        (e.g. ``'HIS_A123'``), matching ``make_res_key``.
+
+    Returns
+    -------
+    set
+        Residues matching ``force_include_residues``, whether newly added or
+        already present in the cluster. Intended to be passed to
+        ``prune_atoms`` as ``protected_residues``.
+    """
+    requested = set(force_include_residues)
+    matched = set()
+    if not requested:
+        return matched
+    for chain in model:
+        for res in chain.get_unpacked_list():
+            res_key = make_res_key(res)
+            if res_key in requested:
+                matched.add(res)
+                requested.discard(res_key)
+                if res not in residues:
+                    residues.add(res)
+                    spheres[-1].add(res)
+                    print(f"> {res_key} added to cluster via force_include_residues")
+    for res_key in requested:
+        print(f"> WARNING: force_include_residues entry {res_key!r} was not found in the structure")
+    return matched
+
+
 def extract_clusters(
     path,
     out,
@@ -1175,6 +1228,7 @@ def extract_clusters(
     hetero_pdb=False,
     include_ligands=2,
     cluster_name_template=None,
+    force_include_residues=[],
     **smooth_params
 ):
     """Extract active site coordination spheres using Voronoi tessellation.
@@ -1219,6 +1273,12 @@ def extract_clusters(
     include_ligands : int, optional
         Ligand inclusion mode: 0 = first sphere only unless in ``ligands``,
         1 = all non-water, 2 = all (default 2).
+    force_include_residues : list, optional
+        Specific protein residues to force-include, in ``'RESNAME_CHAINID'``
+        format (e.g. ``'HIS_A123'``), even if they lie beyond the grown
+        spheres. These residues are added to the outermost sphere, capped
+        like any other extracted residue, and protected from
+        ``max_atom_count`` pruning (default []).
     cluster_name_template : str, optional
         Python format-string controlling cluster directory/file names.
         Defaults to ``None``, which preserves the original behavior of
@@ -1281,6 +1341,7 @@ def extract_clusters(
             c, neighbors, sphere_count, ligands, first_sphere_radius, smooth_method, include_ligands, **smooth_params
         )
         complete_oligomer(ligand_charge, model, residues, spheres, include_ligands)
+        added_residues = add_force_include_residues(model, residues, spheres, force_include_residues)
 
         if cluster_name_template:
             name_fields = {
@@ -1315,7 +1376,7 @@ def extract_clusters(
             cluster_name_map[cluster_name] = metal_id
 
         if max_atom_count is not None:
-            prune_atoms(c, residues, spheres, max_atom_count, ligands)
+            prune_atoms(c, residues, spheres, max_atom_count, ligands, added_residues)
         if charge:
             aa_charge[cluster_name] = compute_charge(spheres, structure, ligand_charge, center_residue)
         if count:
