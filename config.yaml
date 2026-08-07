@@ -41,7 +41,7 @@ guess: generate                        # Method for initial guess
 gpus: 1                                # How many GPUs to use
 memory: 8G                             # How much memory to use
 dielectric: 10                         # Dielectric for implicit solvent
-use_implicit_solvent: null             # null = default (true unless charge_embedding); can enable with embedding
+use_implicit_solvent: true             # PCM/COSMO; set false to disable, or true with charge_embedding for both
 charge_embedding: false                # Prepare QM with MM point-charge embedding
 charge_embedding_cutoff: 20            # Residue-level embedding cutoff (Angstrom)
 charge_embedding_charges: null         # Path to custom charges JSON (null uses built-in ff14SB)
