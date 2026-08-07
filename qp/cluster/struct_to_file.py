@@ -43,24 +43,26 @@ def _center_name_tokens(metals):
     return [str(metals)]
 
 
-def combine_pdbs(out_path, metals, *input_paths, hetero_pdb=False):
+def combine_pdbs(out_path, metals, *input_paths, hetero_pdb=True):
     """Combine multiple sphere PDB files into a single cluster PDB.
 
     Concatenates the contents of multiple PDB files (typically the numbered
     sphere files ``0.pdb``, ``1.pdb``, etc.) while ensuring only one ``END``
-    record appears at the end. Unless ``hetero_pdb`` is True, HETATM lines are
-    kept only when they mention a center residue name from ``metals``.
+    record appears at the end. HETATM filtering is off by default; set
+    ``hetero_pdb=False`` to keep only HETATM lines that mention a center
+    residue name from ``metals``.
 
     Parameters
     ----------
     out_path : str
         Path to the output combined PDB file.
     metals : CenterResidue or list or str
-        Center residue definition used to retain metal/center HETATM records.
+        Center residue definition used when HETATM filtering is enabled.
     *input_paths : str
         Paths to input PDB files to concatenate.
     hetero_pdb : bool, optional
-        If True, include all HETATM records (default False).
+        If True (default), include all HETATM records. If False, drop HETATM
+        lines that do not mention a center residue name from ``metals``.
     """
     metal_tokens = _center_name_tokens(metals)
     with open(out_path, 'w') as outfile:

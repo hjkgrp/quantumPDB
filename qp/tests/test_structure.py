@@ -5,7 +5,9 @@ import shutil
 import filecmp
 
 from qp.protonate import get_protoss, fix
+from qp.protonate.ligand_prop import compute_charge
 from qp.cluster import struct_to_file
+from qp.cluster.spheres import CenterResidue
 
 # Skip Modeller tests if in Github actions
 MISSING_LICENSE = False
@@ -53,7 +55,7 @@ def test_adjust_activesites(tmpdir, sample_pdb):
     output_prot = os.path.join(tmpdir, f"{pdb}_protoss.pdb")
 
     shutil.copy(input_prot, output_prot)
-    fix.adjust_activesites(output_prot, ["FE", "FE2"])
+    fix.adjust_activesites(output_prot, CenterResidue("FE_FE2"))
     assert filecmp.cmp(expected_prot, output_prot), "Adjusted Protoss PDB does not match expected"
 
 
@@ -64,13 +66,18 @@ def test_compute_charge(tmpdir, sample_pdb):
     prot_path = os.path.join(path, "Protoss", f"{pdb}_protoss.pdb")
 
     expected_charge = {}
-    with open(os.path.join(path, f"charge.csv"), "r") as f:
-        for l in f.readlines()[::-1]:
-            if l == "\n":
-                break
-            ligand, charge = l.split(",")
+    with open(os.path.join(path, "charge.csv"), "r") as f:
+        # Ligand charges are stored after a blank line following the cluster section.
+        seen_blank = False
+        for line in f:
+            if line.strip() == "":
+                seen_blank = True
+                continue
+            if not seen_blank:
+                continue
+            ligand, charge = line.strip().split(",", 1)
             expected_charge[ligand] = int(charge)
-    output_charge = get_protoss.compute_charge(sdf_path, prot_path)
+    output_charge = compute_charge(sdf_path, prot_path)
     assert expected_charge == output_charge, "Ligand charge does not match expected"
 
 
