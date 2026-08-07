@@ -371,7 +371,51 @@ def load_custom_charges(filepath):
     return charges
 
 
-def get_charges(charge_embedding_cutoff, charge_embedding_charges=None):
+def resolve_source_pdb(structure_root, pdb_name):
+    """Locate the full-structure PDB used as the MM point-charge source.
+
+    Prefers the Protoss output. When Protoss was skipped (e.g. AMBER
+    ff14SB input), falls back to the untouched original PDB preserved by
+    :func:`qp.structure.setup.prepare_local_pdb`, then to the normalized
+    working copy.
+
+    The original is preferred over the normalized copy because ff14SB
+    charges are keyed on AMBER protonation-state names (``HIP``/``HIE``/
+    ``HID``), which normalization collapses to ``HIS`` (absent from the
+    ff14SB dictionary).
+
+    Parameters
+    ----------
+    structure_root : str
+        Path to the per-structure directory (``{output}/{pdb}``).
+    pdb_name : str
+        Structure basename (directory name under ``output``).
+
+    Returns
+    -------
+    str
+        Path to the PDB to use as the point-charge source.
+
+    Raises
+    ------
+    FileNotFoundError
+        If no candidate PDB exists.
+    """
+    candidates = [
+        os.path.join(structure_root, "Protoss", f"{pdb_name}_protoss.pdb"),
+        os.path.join(structure_root, f"{pdb_name}_original.pdb"),
+        os.path.join(structure_root, f"{pdb_name}.pdb"),
+    ]
+    for candidate in candidates:
+        if os.path.exists(candidate):
+            return candidate
+    raise FileNotFoundError(
+        f"No point-charge source PDB found for {pdb_name}. Looked for: "
+        f"{', '.join(candidates)}"
+    )
+
+
+def get_charges(charge_embedding_cutoff, charge_embedding_charges=None, source_pdb=None):
     """Generate the MM point charge embedding file (``ptchrges.xyz``).
 
     Orchestrates the full charge embedding pipeline: renames residues for
@@ -388,6 +432,11 @@ def get_charges(charge_embedding_cutoff, charge_embedding_charges=None):
         Path to a JSON file containing custom partial charges. When
         ``None`` (default), the built-in AMBER ff14SB charges are used.
         See :func:`load_custom_charges` for the expected file format.
+    source_pdb : str, optional
+        Explicit path to the full-structure PDB to use as the point-charge
+        source. When ``None`` (default), the source is resolved by
+        :func:`resolve_source_pdb` (Protoss output, else the AMBER original,
+        else the normalized working copy).
     """
     # Setup a temporary directory to store files
     temporary_files_dir = "ptchrges_temp"
@@ -397,8 +446,10 @@ def get_charges(charge_embedding_cutoff, charge_embedding_charges=None):
     os.mkdir(temporary_files_dir)
 
     pdb_name = os.getcwd().split('/')[-3]
-    protoss_pdb_name = f'{pdb_name}_protoss.pdb'
-    protoss_pdb_path = os.path.join("/".join(os.getcwd().split('/')[:-2]),"Protoss",protoss_pdb_name)
+    structure_root = "/".join(os.getcwd().split('/')[:-2])
+    if source_pdb is None:
+        source_pdb = resolve_source_pdb(structure_root, pdb_name)
+    protoss_pdb_path = source_pdb
     chain_name = os.getcwd().split('/')[-2]
     renamed_his_pdb_file = f'{temporary_files_dir}/{chain_name}_rename_his.pdb'
     if charge_embedding_charges is not None:

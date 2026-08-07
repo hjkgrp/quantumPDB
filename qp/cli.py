@@ -106,13 +106,14 @@ def run(config):
         if capping or charge:
             protoss = True
 
-    for pdb, path, source_cif in pdb_all:
+    for pdb, path, source in pdb_all:
         try:
             click.secho("╔══════╗", bold=True)
             click.secho(f"║ {pdb.upper()} ║", bold=True)
             click.secho("╚══════╝", bold=True)
 
             # Fetch classic PDB, or convert local/RCSB mmCIF when needed
+            source_cif = source["path"] if (source and source["type"] == "cif") else None
             if not os.path.isfile(path):
                 if source_cif:
                     click.echo("> Preparing structure from local mmCIF")
@@ -162,9 +163,14 @@ def run(config):
                 )
             
             residues_with_clashes = [] # Start by assuming no protoss clashes
+            
+            is_amber = bool(source) and source["type"] == "amber"
+            use_modeller = modeller and not is_amber
+            use_protoss = protoss and not is_amber
+            
             for i in range(max_clash_refinement_iter):
                 mod_path = f"{output}/{pdb}/{pdb}_modeller.pdb"
-                if modeller:
+                if use_modeller:
                     if skip in ["modeller", "all"] and os.path.isfile(mod_path) and not residues_with_clashes:
                         click.echo("> Modeller file found")
                     else:
@@ -202,7 +208,7 @@ def run(config):
                 protoss_pdb = f"{prot_path}/{pdb}_protoss.pdb"
                 ligands_sdf = f"{prot_path}/{pdb}_ligands.sdf"
 
-                if protoss:
+                if use_protoss:
                     if skip in ["protoss", "all"] and os.path.isfile(protoss_pdb) and not residues_with_clashes:
                         click.echo("> Protoss file found")
                     else:
@@ -221,7 +227,7 @@ def run(config):
                         else:
                             from qp.protonate.fix import clean_occupancy, fix_OXT
                             click.echo("> Running Protoss")
-                            if modeller:
+                            if use_modeller:
                                 pdb_path = mod_path
                             else:
                                 pdb_path = path
@@ -244,19 +250,21 @@ def run(config):
                             get_protoss.download(job, ligands_sdf, "ligands")
                             get_protoss.download(job, protoss_log_file, "log")
                             get_protoss.repair_ligands(protoss_pdb, pdb_path)
-
-                # Get any residues identified by Protoss as problematic
-                from qp.protonate.parse_output import parse_log
-                AA = missing.define_residues()
-                residues_with_clashes = parse_log(protoss_log_file, protoss_pdb, AA)
-                if residues_with_clashes:
-                    print(f"> WARNING: Protoss removed {len(residues_with_clashes)} residues due to clashes")
-                    clash_details = ", ".join([f"{res_name}{res_id} in chain {chain}" for res_id, _, _, chain, res_name in sorted(list(residues_with_clashes))])
-                    print(f"> WARNING: Remodeling {clash_details} with Modeller.")
+                if use_protoss:
+                    # Get any residues identified by Protoss as problematic
+                    from qp.protonate.parse_output import parse_log
+                    AA = missing.define_residues()
+                    residues_with_clashes = parse_log(protoss_log_file, protoss_pdb, AA)
+                    if residues_with_clashes:
+                        print(f"> WARNING: Protoss removed {len(residues_with_clashes)} residues due to clashes")
+                        clash_details = ", ".join([f"{res_name}{res_id} in chain {chain}" for res_id, _, _, chain, res_name in sorted(list(residues_with_clashes))])
+                        print(f"> WARNING: Remodeling {clash_details} with Modeller.")
+                    else:
+                        break # Don't loop again as no clashes were detected
                 else:
-                    break # Don't loop again as no clashes were detected
+                    break # Don't loop again as no Protoss was used
 
-            if protoss and convert_to_nhie_oxo:
+            if use_protoss and convert_to_nhie_oxo:
                 click.echo("> Converting AKG to reactive OXO and SIN state")
                 from qp.structure.convert_nhie_oxo import add_oxo_sin
                 add_oxo_sin(protoss_pdb)
@@ -277,9 +285,9 @@ def run(config):
                 update_sin_sdf(ligands_sdf, sin_ligands_sdf)
 
             # Set the path to the current structure, there may be a better way to do this
-            if modeller:
+            if use_modeller:
                 path = mod_path
-            if protoss:
+            if use_protoss:
                 # Check if any atoms changed from HETATM to ATOM or vice versa for future troubleshooting purposes
                 from qp.protonate.parse_output import record_type
                 changed_residues = record_type(mod_path, protoss_pdb) # I want to do something with this eventually
@@ -294,11 +302,12 @@ def run(config):
             if coordination:
                 from qp.protonate.ligand_prop import compute_charge, compute_spin
                 click.echo("> Extracting clusters")
-                if charge:
+                if charge and not is_amber:
                     ligand_charge = compute_charge(f"{prot_path}/{pdb}_ligands.sdf", path)
                     ligand_spin = compute_spin(f"{prot_path}/{pdb}_ligands.sdf")
                 else:
                     ligand_charge = dict()
+                    ligand_spin = dict()
                 cluster_paths = spheres.extract_clusters(
                     path, f"{output}/{pdb}", center_residue, sphere_count, 
                     first_sphere_radius, max_atom_count, merge_cutoff, smooth_method,
