@@ -13,6 +13,30 @@ SUGAR_CENTER = CenterResidue("BGC_GAL_NGA_SIA_NI")
 DNA_CENTER = CenterResidue("DT_B501-MA7_B502-DT_B503")
 
 
+@pytest.mark.parametrize(
+    "spec, mode, residues",
+    [
+        ("FE", "fuzzy", ["FE"]),
+        ("FE_FE2", "fuzzy", ["FE", "FE2"]),
+        ("FE_A199", "fuzzy", ["FE", "A199"]),
+        ("exact:FE_A199", "strict", ["FE_A199"]),
+        ("EXACT:FE_A199", "strict", ["FE_A199"]),
+        ("CU_A357-CU_A358", "strict", ["CU_A357", "CU_A358"]),
+        ("exact:FE_A155-HIS_A93", "strict", ["FE_A155", "HIS_A93"]),
+        ("DT_B501-MA7_B502-DT_B503", "strict", ["DT_B501", "MA7_B502", "DT_B503"]),
+    ],
+)
+def test_center_residue_parsing(spec, mode, residues):
+    center = CenterResidue(spec)
+    assert center.mode == mode
+    assert center.residue_list == residues
+
+
+def test_center_residue_exact_prefix_requires_key():
+    with pytest.raises(ValueError, match="exact:"):
+        CenterResidue("exact:")
+
+
 def check_clusters(path, out, metal_ids):
     for metal in metal_ids:
         assert os.path.isdir(os.path.join(path, metal)), f"Cluster center {metal} not found"

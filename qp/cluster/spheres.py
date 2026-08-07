@@ -41,11 +41,18 @@ class CenterResidue:
     def __init__(self, center_residue: str, resname_map=None):
         """Parse a center residue definition string.
 
-        If the string contains dashes (e.g., ``'CU_A357-CU_A358'``), strict
-        mode is used and each dash-separated token must exactly match a
-        residue's ``RESNAME_CHAINID`` key. Otherwise, fuzzy mode is used
-        and underscore-separated tokens are matched against HETATM residue
-        names.
+        Matching mode is chosen as follows:
+
+        * ``exact:FE_A199`` --- **strict** single-residue selection. The
+          ``exact:`` prefix is required for a single ``RESNAME_CHAINID`` key
+          because bare ``FE_A199`` would otherwise be ambiguous with fuzzy
+          resnames (e.g. CCD code ``A199``).
+        * ``CU_A357-CU_A358`` --- **strict** multi-residue list. Dash-separated
+          exact keys do not need the ``exact:`` prefix.
+        * ``exact:FE_A155-HIS_A93`` --- also strict; the prefix is allowed on
+          multi-residue lists too.
+        * ``FE`` / ``FE_FE2`` --- **fuzzy** mode: underscore-separated residue
+          names matched against HETATM records only.
 
         When ``resname_map`` is provided (from an mmCIF→PDB remap sidecar),
         original longer residue names (e.g. 5-letter CCD codes) are also
@@ -62,14 +69,25 @@ class CenterResidue:
         """
         self.center_residue_str = center_residue
         self.resname_map = dict(resname_map or {})
-        residue_list = center_residue.split("-")
-        if len(residue_list) == 1:
-            self.mode = "fuzzy"
-            self.residue_list = center_residue.split("_")
-        else:
+
+        raw = center_residue.strip()
+        exact_prefix = raw.lower().startswith("exact:")
+        if exact_prefix:
+            raw = raw.split(":", 1)[1].strip()
+            if not raw:
+                raise ValueError(
+                    "Center residue 'exact:' prefix must be followed by a "
+                    "RESNAME_CHAINID key (e.g. 'exact:FE_A199')."
+                )
+
+        residue_list = raw.split("-")
+        if exact_prefix or len(residue_list) > 1:
             self.mode = "strict"
             self.residue_list = residue_list
-        
+        else:
+            self.mode = "fuzzy"
+            self.residue_list = raw.split("_")
+
     def __str__(self):
         return self.center_residue_str
     
