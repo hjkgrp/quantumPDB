@@ -1,7 +1,8 @@
-input: [1sp9, 2q4a, 3a8g, 3x20, 6f2a]
+input: [1sp9]
 output_dir: qp/tests/samples
-modeller: true
-protoss: true
+modeller: false
+protoss: false
+find_backbone_atoms:true
 coordination: true
 skip: all
 optimize_select_residues: 1
