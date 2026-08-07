@@ -5,6 +5,12 @@ import glob
 import filecmp
 
 from qp.cluster import spheres
+from qp.cluster.spheres import CenterResidue
+
+
+FE_CENTER = CenterResidue("FE_FE2")
+SUGAR_CENTER = CenterResidue("BGC_GAL_NGA_SIA_NI")
+DNA_CENTER = CenterResidue("DT_B501-MA7_B502-DT_B503")
 
 
 def check_clusters(path, out, metal_ids):
@@ -38,8 +44,8 @@ def test_extract_clusters(tmpdir, sample_cluster):
     pdb, metal_ids, path = sample_cluster
     pdb_path = os.path.join(path, "Protoss", f"{pdb}_protoss.pdb")
     spheres.extract_clusters(
-        pdb_path, tmpdir, ["FE", "FE2"],
-        smooth_method="dummy_atom", mean_distance=3
+        pdb_path, tmpdir, FE_CENTER,
+        smooth_method="dummy_atom", mean_distance=3, capping=0
     )
     check_clusters(path, tmpdir, metal_ids)
 
@@ -49,7 +55,7 @@ def test_cap_heavy(tmpdir, sample_cluster):
     pdb, metal_ids, path = sample_cluster
     pdb_path = os.path.join(path, "Protoss", f"{pdb}_protoss.pdb")
     spheres.extract_clusters(
-        pdb_path, tmpdir, ["FE", "FE2"], capping=2, 
+        pdb_path, tmpdir, FE_CENTER, capping=2,
         smooth_method="dummy_atom", mean_distance=3
     )
     check_clusters(path, tmpdir, metal_ids)
@@ -60,8 +66,8 @@ def test_box_plot(tmpdir, sample_cluster):
     pdb, metal_ids, path = sample_cluster
     pdb_path = os.path.join(path, "Protoss", f"{pdb}_protoss.pdb")
     spheres.extract_clusters(
-        pdb_path, tmpdir, ["FE", "FE2"],
-        smooth_method="box_plot"
+        pdb_path, tmpdir, FE_CENTER,
+        smooth_method="box_plot", capping=0
     )
     check_clusters(path, tmpdir, metal_ids)
 
@@ -71,8 +77,8 @@ def test_dbscan(tmpdir, sample_cluster):
     pdb, metal_ids, path = sample_cluster
     pdb_path = os.path.join(path, "Protoss", f"{pdb}_protoss.pdb")
     spheres.extract_clusters(
-        pdb_path, tmpdir, ["FE", "FE2"], 
-        smooth_method="dbscan", eps=6, min_samples=3
+        pdb_path, tmpdir, FE_CENTER,
+        smooth_method="dbscan", eps=6, min_samples=3, capping=0
     )
     check_clusters(path, tmpdir, metal_ids)
 
@@ -91,9 +97,9 @@ def test_merge_centers(tmpdir, sample_cluster):
     pdb, metal_ids, path = sample_cluster
     pdb_path = os.path.join(path, "Protoss", f"{pdb}_protoss.pdb")
     spheres.extract_clusters(
-        pdb_path, tmpdir, ["BGC", "GAL", "NGA", "SIA", "NI"],
+        pdb_path, tmpdir, SUGAR_CENTER,
         merge_cutoff=4.0,
-        smooth_method="dummy_atom", mean_distance=3
+        smooth_method="dummy_atom", mean_distance=3, capping=0
     )
     check_clusters(path, tmpdir, metal_ids)
 
@@ -103,9 +109,9 @@ def test_prune_atoms(tmpdir, sample_cluster):
     pdb, metal_ids, path = sample_cluster
     pdb_path = os.path.join(path, "Protoss", f"{pdb}_protoss.pdb")
     spheres.extract_clusters(
-        pdb_path, tmpdir, ["DT", "MA7"],
+        pdb_path, tmpdir, DNA_CENTER,
         max_atom_count=102, merge_cutoff=2.0,
-        smooth_method="dummy_atom", mean_distance=3
+        smooth_method="dummy_atom", mean_distance=3, capping=0
     )
     check_clusters(path, tmpdir, metal_ids)
 
@@ -127,11 +133,12 @@ def test_cluster_name_template(tmpdir, sample_cluster):
     pdb, metal_ids, path = sample_cluster
     pdb_path = os.path.join(path, "Protoss", f"{pdb}_protoss.pdb")
     spheres.extract_clusters(
-        pdb_path, tmpdir, ["BGC", "GAL", "NGA", "SIA", "NI"],
+        pdb_path, tmpdir, SUGAR_CENTER,
         merge_cutoff=4.0,
         smooth_method="dummy_atom", mean_distance=3,
         first_sphere_radius=4.0,
-        cluster_name_template="A_{radius}"
+        cluster_name_template="A_{radius}",
+        capping=0,
     )
 
     expected_names = ["A_4", "A_4_1", "A_4_2", "A_4_3", "A_4_4"]
@@ -178,7 +185,7 @@ def test_cluster_name_template_bad_field(tmpdir):
     with pytest.raises(ValueError, match="cluster_name_template"):
         spheres.extract_clusters(
             os.path.join(os.path.dirname(__file__), "samples", "1lm6", "Protoss", "1lm6_protoss.pdb"),
-            tmpdir, ["FE", "FE2"],
+            tmpdir, FE_CENTER,
             smooth_method="box_plot",
             cluster_name_template="A_{not_a_real_field}"
         )

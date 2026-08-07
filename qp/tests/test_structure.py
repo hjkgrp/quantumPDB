@@ -5,7 +5,7 @@ import shutil
 import filecmp
 
 from qp.protonate import get_protoss, fix
-from qp.structure import struct_to_file
+from qp.cluster import struct_to_file
 
 # Skip Modeller tests if in Github actions
 MISSING_LICENSE = False
@@ -15,7 +15,7 @@ except:
     MISSING_LICENSE = True
 
 if not MISSING_LICENSE:
-    from qp.structure import missing_loops
+    from qp.structure import missing as missing_loops
 
 
 # ========== protonate ==========
@@ -148,4 +148,6 @@ def test_combine_pdbs(tmpdir, sample_cluster):
         expected_pdb = os.path.join(path, metal, f"{metal}.pdb")
         output_pdb = os.path.join(tmpdir, f"{metal}.pdb")
         struct_to_file.combine_pdbs(output_pdb, ["FE", "FE2"], *sphere_paths)
-        assert filecmp.cmp(expected_pdb, output_pdb), f"Combined PDB does not match expected"
+        assert filecmp.cmp(expected_pdb, output_pdb), (
+            f"Combined PDB does not match expected"
+        )
