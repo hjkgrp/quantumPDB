@@ -1,24 +1,25 @@
 name: test
 channels:
-
   - conda-forge
-
-  - defaults
 dependencies:
-    # Base depends
+  # Base
   - python
   - pip
 
-    # Testing
+  # Testing
   - pytest
   - pytest-cov
   - codecov
 
-    # Pip-only installs
-  #- pip:
-  #  - codecov
-
+  # Runtime deps needed to import and exercise qp in CI
   - biopython
+  - click
+  - matplotlib
   - numpy
+  - pandas
+  - periodictable
+  - pyyaml
   - requests
   - scikit-learn
+  - scipy
+  - tqdm
