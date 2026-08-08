@@ -17,9 +17,9 @@ def welcome():
     click.secho("\n")
     click.secho("             ╔════════════════════════╗             ", bold=True)
     click.secho("             ║       __________       ║             ", bold=True)
-    click.secho("             ║     / ____/\____ \     ║             ", bold=True)
+    click.secho(r"             ║     / ____/\____ \     ║             ", bold=True)
     click.secho("             ║    < <_|  ||  |_> >    ║             ", bold=True)
-    click.secho("             ║     \__   ||   __/     ║             ", bold=True)
+    click.secho(r"             ║     \__   ||   __/     ║             ", bold=True)
     click.secho("             ║        |__||__|        ║             ", bold=True)
     click.secho("             ║                        ║             ", bold=True)
     click.secho("             ║       QUANTUMPDB       ║             ", bold=True)
@@ -71,6 +71,11 @@ def run(config):
     coordination = config_data.get('coordination', False)
     skip = config_data.get('skip', 'all')
     max_clash_refinement_iter = config_data.get('max_clash_refinement_iter', 5)
+    # Prefer convert_to_nhie_oxo; accept legacy convert_to_oxo as an alias.
+    convert_to_nhie_oxo = config_data.get(
+        'convert_to_nhie_oxo',
+        config_data.get('convert_to_oxo', False),
+    )
     
     input = config_data.get('input', [])
     output = config_data.get('output_dir', '')
@@ -80,7 +85,6 @@ def run(config):
     if modeller:
         from qp.structure import missing
         optimize = config_data.get('optimize_select_residues', 1)
-        convert_to_nhie_oxo = config_data.get('convert_to_nhie_oxo', False)
     if protoss:
         from qp.protonate import get_protoss, fix
     if coordination:
@@ -107,6 +111,7 @@ def run(config):
             protoss = True
 
     for pdb, path, source_cif in pdb_all:
+        cwd = os.getcwd()
         try:
             click.secho("╔══════╗", bold=True)
             click.secho(f"║ {pdb.upper()} ║", bold=True)
@@ -292,18 +297,21 @@ def run(config):
                 fix.adjust_activesites(path, center_residue)
 
             if coordination:
-                from qp.protonate.ligand_prop import compute_charge, compute_spin
+                from qp.protonate.ligand_prop import compute_charge, compute_spin, collect_RGP_atoms
                 click.echo("> Extracting clusters")
                 if charge:
                     ligand_charge = compute_charge(f"{prot_path}/{pdb}_ligands.sdf", path)
                     ligand_spin = compute_spin(f"{prot_path}/{pdb}_ligands.sdf")
+                    RGP_atoms = collect_RGP_atoms(f"{prot_path}/{pdb}_ligands.sdf")
                 else:
                     ligand_charge = dict()
+                    RGP_atoms = dict()
                 cluster_paths = spheres.extract_clusters(
                     path, f"{output}/{pdb}", center_residue, sphere_count, 
                     first_sphere_radius, max_atom_count, merge_cutoff, smooth_method,
                     ligands, capping, charge, ligand_charge, count, xyz, hetero_pdb, include_ligands,
                     cluster_name_template=cluster_name_template,
+                    RGP_atoms=RGP_atoms,
                     **smooth_params
                 )
 
@@ -332,6 +340,7 @@ def run(config):
             # Log the exception details to stderr, which is already redirected to log.out
             click.echo(f"> CRITICAL FAILURE: Error processing {pdb.upper()}", err=True)
             traceback.print_exc(file=sys.stderr)
+            os.chdir(cwd)
             # if keyboard interrupt, exit the program
             if isinstance(e, KeyboardInterrupt):
                 click.echo(f"> Keyboard interrupt detected. Exiting program.")
