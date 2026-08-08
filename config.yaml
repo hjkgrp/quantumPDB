@@ -18,7 +18,7 @@ center_residues: [FE]                  # Residue name(s) to use as the cluster c
 additional_ligands: []                 # Residues forced into the first sphere
 number_of_spheres: 2                   # Coordination spheres to generate
 radius_of_first_sphere: 4.0            # Distance cutoff for the first sphere
-include_ligands: 2                     # 0 = first sphere only, 1 = non-water ligands, 2 = all ligands/waters
+include_ligands: 2                     # 0 = first sphere only, 1 = non-water ligands, 2 = all ligands/waters, 3 = center + standard AA + waters
 capping_method: 1                      # Cap residues with None (0), hydrogens (1), ACE/NME (2)
 smoothing_method: 2                    # 0 = box plot, 1 = DBSCAN, 2 = dummy atom, 3 = none
 merge_distance_cutoff: 0.0             # Merge nearby centers within this distance (Angstrom)

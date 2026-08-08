@@ -43,9 +43,14 @@ Sphere Construction
    - ``0`` --- ligands/waters only if already selected for the first sphere
    - ``1`` --- include non-water ligands in outer spheres
    - ``2`` --- include ligands and waters (default)
+   - ``3`` --- center residue(s), standard amino acids, and waters only
 
 5. ``additional_ligands`` forces named residues into the first sphere and
    protects them from pruning.
+
+When Protoss ligand SDFs contain ``R#`` / ``M  RGP`` attachment points,
+quantumPDB matches them onto the structure and caps missing RGP sites with
+hydrogens during cluster extraction.
 
 Smoothing Methods
 -----------------
