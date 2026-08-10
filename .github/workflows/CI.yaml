@@ -38,6 +38,10 @@ jobs:
   test:
     name: Test on ${{ github.event.inputs.os || 'ubuntu-latest' }}, Python ${{ github.event.inputs.python-version || '3.12' }}
     runs-on: ${{ github.event.inputs.os || 'ubuntu-latest' }}
+    env:
+      # Consumed by the salilab modeller post-link script during install.
+      # Also used below to rewrite config.py when the env is restored from cache.
+      KEY_MODELLER: ${{ secrets.MODELLER_LICENSE_KEY }}
 
     steps:
       - uses: actions/checkout@v4
@@ -59,7 +63,40 @@ jobs:
           condarc: |
             channels:
               - conda-forge
+              - salilab
             channel_priority: strict
+
+      - name: Configure Modeller license
+        run: |
+          if [ -z "${KEY_MODELLER}" ]; then
+            echo "::error::MODELLER_LICENSE_KEY secret is empty or unavailable"
+            exit 1
+          fi
+          python <<'PY'
+          import glob
+          import os
+          import sys
+
+          key = os.environ["KEY_MODELLER"]
+          matches = sorted(
+              glob.glob(
+                  os.path.join(
+                      sys.prefix, "lib", "modeller-*", "modlib", "modeller", "config.py"
+                  )
+              )
+          )
+          if not matches:
+              raise SystemExit(f"Could not find modeller config.py under {sys.prefix}")
+          path = matches[-1]
+          install_dir = os.path.abspath(
+              os.path.join(os.path.dirname(path), os.pardir, os.pardir)
+          )
+          with open(path, "w", encoding="utf-8") as fh:
+              fh.write(f"install_dir = {install_dir!r}\n")
+              fh.write(f"license = {key!r}\n")
+          print(f"Configured Modeller license at {path}")
+          PY
+          python -c "import modeller; print('modeller import ok:', getattr(modeller, '__version__', 'unknown'))"
 
       - name: Install package
         run: |
