@@ -1,2 +1,2 @@
-在 B501 cluster 中检查：
-- 最远距离的两个原子不超过 40 Angstrom。
+In the B501 cluster, check:
+- The maximum distance between any two atoms is at most 45 Å

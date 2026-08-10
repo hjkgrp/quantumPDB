@@ -1,2 +1,2 @@
-在 C401 cluster 中检查
-- HIS_C314 的 ND1 1.1 angstrom 范围内有氢原子，但 NE2 同样范围内没有
+In the C401 cluster, check:
+- HIS_C314 has a hydrogen within 1.1 Å of ND1, but none within 1.1 Å of NE2

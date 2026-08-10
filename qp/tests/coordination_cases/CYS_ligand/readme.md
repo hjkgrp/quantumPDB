@@ -1,2 +1,2 @@
-在 A201 cluster 中检查
-- charge.csv 中列名为 1，行为 A201 的 charge 为 0
+In the A201 cluster, check:
+- In charge.csv, the charge for row A201 in column 1 is 0
