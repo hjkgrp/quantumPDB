@@ -11,6 +11,7 @@ skip: all                              # Skip 'modeller', 'protoss', or 'all' jo
 optimize_select_residues: 1            # Modeller to model no (0), missing (1), or all (2) residues
 convert_to_nhie_oxo: false             # Convert A-KG NHIEs to succinate-oxo NHIEs (special workflow)
 max_clash_refinement_iter: 5           # Max Modeller--Protoss clash iterations (inactive under Protoss API v2)
+find_backbone_atoms: false             # Write *_backbone.txt atom indices for each cluster
 
 # Cluster model parameters
 max_atom_count: null

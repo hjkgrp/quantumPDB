@@ -1221,10 +1221,14 @@ def compute_charge(
                             charge_debug("backbone N -1", res)
                             c -= 1
 
-                # Check for charged N-terminus
-                if res.has_id("N") and res_id in n_terminals:
+                # Check for charged N-terminus (NH3+ / Pro NH2+).
+                # Protoss may leave a "fake" N-terminus with a single amide-like H;
+                # H-capping then yields neutral NH2. NeighborSearch counts the N
+                # itself, so CN > 4 marks NH3+ / Pro-NH2+ (5 neighbors) but not
+                # capped NH2 (4 neighbors).
+                if res_id in n_terminals and res.has_id("N"):  # exclude sugar chain terminus
                     check_flag, _ = check_atom_valence(
-                        res, sphere_tree, "N", 4, backbone=False
+                        res, cluster_tree, "N", 4, backbone=False
                     )
                     if check_flag:
                         charge_debug("sphere 1+ N terminal +1", res)

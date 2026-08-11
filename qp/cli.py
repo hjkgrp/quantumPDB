@@ -80,6 +80,7 @@ def run(config):
     input = config_data.get('input', [])
     output = config_data.get('output_dir', '')
     center_yaml_residues = config_data.get('center_residues', [])
+    backbone=config_data.get('find_backbone_atoms', False)
     pdb_all, center_residues = setup.parse_input(input, output, center_yaml_residues)
 
     if modeller:
@@ -314,6 +315,26 @@ def run(config):
                     RGP_atoms=RGP_atoms,
                     **smooth_params
                 )
+                if backbone:
+                    from qp.cluster.get_backbone import search_backbone_atoms
+                    click.echo("> Searching for backbone atoms (C, CA, N, O)")
+                    for cluster_path in cluster_paths:
+                        cluster_dir = os.path.basename(cluster_path.rstrip('/'))
+                        pdb_file = os.path.join(cluster_path, f"{cluster_dir}.pdb")
+        
+                        if not os.path.exists(pdb_file):
+                            click.echo(f"  > PDB file not found: {pdb_file}")
+                            continue
+                        backbone_data = search_backbone_atoms(pdb_file)
+            
+                        backbone_output = pdb_file.replace(".pdb", "_backbone.txt")
+                        with open(backbone_output, "w") as f:
+                            f.write("Atom_ID\n")
+                            for index  in backbone_data:
+                                f.write(f"{index}\n")
+            
+                        click.echo(f"  > Found {len(backbone_data)} backbone atoms in {cluster_path}")
+                        click.echo(f"  > Saved to {backbone_output}")
 
                 if charge:
                     charge_csv_path = f"{output}/{pdb}/charge.csv"
