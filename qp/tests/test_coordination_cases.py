@@ -31,7 +31,7 @@ def _fixture_root(case: str, pdb: str) -> Path:
     return CASES_DIR / case / pdb
 
 
-def _prepare_workdir(tmp_path: Path, case: str, pdb: str, center_residues) -> Path:
+def _prepare_workdir(tmp_path: Path, case: str, pdb: str, center_residues, overrides=None) -> Path:
     """Copy fixtures into tmp_path/{pdb}/ and write a config.yaml."""
     src = _fixture_root(case, pdb)
     dest = tmp_path / pdb
@@ -42,6 +42,7 @@ def _prepare_workdir(tmp_path: Path, case: str, pdb: str, center_residues) -> Pa
         "input": pdb,
         "output_dir": str(tmp_path),
         "center_residues": list(center_residues),
+        **(overrides or {}),
     }
     config_path = tmp_path / "config.yaml"
     with open(config_path, "w") as f:
@@ -171,8 +172,17 @@ def run_case(tmp_path):
 
     def _run(case_name: str):
         meta = CASES_BY_NAME[case_name]
+        overrides = {
+            k: v
+            for k, v in meta.items()
+            if k not in {"case", "pdb", "center_residues"}
+        }
         config_path = _prepare_workdir(
-            tmp_path, meta["case"], meta["pdb"], meta["center_residues"]
+            tmp_path,
+            meta["case"],
+            meta["pdb"],
+            meta["center_residues"],
+            overrides=overrides,
         )
         _run_qp(config_path)
         return tmp_path, meta["pdb"]
@@ -306,6 +316,26 @@ def _assert_partial_occupancy_large_gt_small(tmp_path, pdb):
     assert "THJ_A503" not in keys
 
 
+def _assert_fake_n_terminus(tmp_path, pdb):
+    sphere, _ = _parse_charge_csv(tmp_path / pdb / "charge.csv")
+    assert sphere["C2"]["3"] == 0
+
+
+def _assert_atom_count(tmp_path, pdb):
+    _, ligands = _parse_charge_csv(tmp_path / pdb / "charge.csv")
+    assert ligands["NAG_A1 GAL_A2 NAG_A3 GAL_A4"] == 0
+
+
+def _assert_polysacchride(tmp_path, pdb):
+    keys = _residue_keys(_parse_pdb_atoms(_cluster_pdb(tmp_path, pdb, "B2")))
+    assert "BGC_B1" in keys
+
+
+def _assert_terminal_ligand(tmp_path, pdb):
+    _, ligands = _parse_charge_csv(tmp_path / pdb / "charge.csv")
+    assert ligands["BGC_E1 GAL_E2"] == 0
+
+
 ASSERTIONS = {
     "ASP_proton": _assert_asp_proton,
     "CSS_ligand": _assert_css_ligand,
@@ -320,4 +350,8 @@ ASSERTIONS = {
     "oxygen": _assert_oxygen,
     "partial_occupancy_AA_gt_other": _assert_partial_occupancy_aa_gt_other,
     "partial_occupancy_large_gt_small": _assert_partial_occupancy_large_gt_small,
+    "fake_N_terminus": _assert_fake_n_terminus,
+    "atom_count": _assert_atom_count,
+    "polysacchride": _assert_polysacchride,
+    "terminal_ligand": _assert_terminal_ligand,
 }

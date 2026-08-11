@@ -57,3 +57,16 @@ cases:
   - case: partial_occupancy_large_gt_small
     pdb: 4xez
     center_residues: [FE]
+  - case: fake_N_terminus
+    pdb: 1lt3
+    center_residues: [GAL]
+  - case: atom_count
+    pdb: 2d6o
+    center_residues: [GAL]
+  - case: polysacchride
+    pdb: 2wt1
+    center_residues: [GAL]
+  - case: terminal_ligand
+    pdb: 1jyn
+    center_residues: [GAL]
+    number_of_spheres: 2
