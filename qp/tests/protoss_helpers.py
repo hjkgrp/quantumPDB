@@ -13,11 +13,12 @@ def proteins_plus_reachable(timeout=15):
         return False
 
 
-# Exceptions raised by get_protoss.upload / submit / download when the
-# ProteinsPlus service is unreachable or rejects the request after retries.
+# Exceptions from get_protoss.upload / submit / download that indicate the
+# ProteinsPlus service is unreachable or the request failed after retries.
+# Do not include ValueError: that is also raised for Protoss job/business
+# failures (e.g. non-success status), which should fail the test.
 PROTOSS_NETWORK_ERRORS = (
     KeyError,
-    ValueError,
     requests.RequestException,
     TimeoutError,
     OSError,
