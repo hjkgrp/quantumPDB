@@ -8,6 +8,11 @@ from qp.protonate import get_protoss, fix
 from qp.protonate.ligand_prop import compute_charge
 from qp.cluster import struct_to_file
 from qp.cluster.spheres import CenterResidue
+from qp.tests.protoss_helpers import (
+    PROTOSS_NETWORK_ERRORS,
+    proteins_plus_reachable,
+    skip_if_protoss_unavailable,
+)
 
 # Skip Modeller tests if in Github actions
 MISSING_LICENSE = False
@@ -22,15 +27,22 @@ if not MISSING_LICENSE:
 
 # ========== protonate ==========
 
+@pytest.mark.skipif(
+    not proteins_plus_reachable(),
+    reason="ProteinsPlus API unreachable; skipping live Protoss integration test",
+)
 @pytest.mark.parametrize("sample_pdb", ["1lm6"], indirect=True)
 def test_protoss(tmpdir, sample_pdb):
     pdb, path = sample_pdb
     pdb_path = os.path.join(path, f"{pdb}.pdb")
     out = os.path.join(tmpdir, f"{pdb}_protoss.pdb")
 
-    pid = get_protoss.upload(pdb_path)
-    job = get_protoss.submit(pid)
-    get_protoss.download(job, out)
+    try:
+        pid = get_protoss.upload(pdb_path)
+        job = get_protoss.submit(pid)
+        get_protoss.download(job, out)
+    except PROTOSS_NETWORK_ERRORS as exc:
+        skip_if_protoss_unavailable(exc)
     assert os.path.getsize(out) > 0, "Found empty PDB file"
 
 

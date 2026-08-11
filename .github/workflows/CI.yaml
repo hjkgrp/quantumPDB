@@ -42,6 +42,9 @@ jobs:
       # Consumed by the salilab modeller post-link script during install.
       # Also used below to rewrite config.py when the env is restored from cache.
       KEY_MODELLER: ${{ secrets.MODELLER_LICENSE_KEY }}
+      # Fail fast on ProteinsPlus outages; live Protoss tests skip instead of fail.
+      PROTOSS_UPLOAD_RETRIES: "1"
+      PROTOSS_UPLOAD_RETRY_DELAY: "5"
 
     steps:
       - uses: actions/checkout@v4
