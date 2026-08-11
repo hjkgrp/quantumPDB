@@ -139,18 +139,18 @@ html_context = {
     "style": "dark",
     "landing_page": {
         "menu": [
-            {"title": "quantumpdb", "url": "https://quantumpdb.readthedocs.io/"},
+            {"title": "quantumpdb", "url": "index.html"},
             {
                 "title": "Installation",
-                "url": "https://quantumpdb.readthedocs.io/en/latest/getting_started.html",
+                "url": "getting_started.html",
             },
             {
                 "title": "Quickstart",
-                "url": "https://quantumpdb.readthedocs.io/en/latest/quickstart.html",
+                "url": "quickstart.html",
             },
             {
                 "title": "User Guide",
-                "url": "https://quantumpdb.readthedocs.io/en/latest/workflow.html",
+                "url": "workflow.html",
             },
         ]
     }

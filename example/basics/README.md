@@ -22,7 +22,7 @@ qp run -c example/basics/cluster_only.yaml
 ```
 
 Expected layout under `example/basics/output/{pdb}/` matches
-[Output Structure](https://quantumpdb.readthedocs.io/en/latest/output.html):
+[Output Structure](https://hjkgrpquantumpdb.readthedocs.io/en/latest/output.html):
 `Protoss/`, `charge.csv`, `count.csv`, and `{metal_id}/0.pdb`, `1.pdb`, …
 plus `{metal_id}.xyz`.
 

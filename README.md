@@ -6,7 +6,7 @@ QuantumPDB
 models from protein structures: structure preparation, protonation, Voronoi
 cluster extraction, TeraChem job setup, and post-processing analysis.
 
-Full user documentation: [quantumpdb.readthedocs.io](https://quantumpdb.readthedocs.io/)
+Full user documentation: [hjkgrpquantumpdb.readthedocs.io](https://hjkgrpquantumpdb.readthedocs.io/)
 
 ## Table of Contents
 1. **Overview**
@@ -80,7 +80,7 @@ qp run -c example/basics/cluster_only.yaml
 ```
 
 This downloads 1OS7, runs Modeller + Protoss, and writes cluster models under
-`example/basics/output/`. See [Quickstart](https://quantumpdb.readthedocs.io/en/latest/quickstart.html)
+`example/basics/output/`. See [Quickstart](https://hjkgrpquantumpdb.readthedocs.io/en/latest/quickstart.html)
 and `example/basics/README.md`.
 
 ## 6. Developer guide

@@ -31,7 +31,7 @@ pip install -e ..
 
 `readthedocs.yml` at the repository root builds with Python 3.11, installs from
 `docs/requirements.yaml`, then `pip install .`. Hosted docs:
-https://quantumpdb.readthedocs.io/
+https://hjkgrpquantumpdb.readthedocs.io/
 
 ## Notes
 

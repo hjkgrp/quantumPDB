@@ -10,6 +10,11 @@ import pytest
 import requests
 
 from qp.protonate import get_protoss
+from qp.tests.protoss_helpers import (
+    PROTOSS_NETWORK_ERRORS,
+    proteins_plus_reachable,
+    skip_if_protoss_unavailable,
+)
 
 # Cellular retinoic-acid-binding protein I with all-trans retinoic acid (REA).
 # Small (~1.2k atoms) and has a clear non-water ligand for retention checks.
@@ -18,16 +23,8 @@ TEST_LIGAND = "REA"
 RCSB_PDB_URL = f"https://files.rcsb.org/download/{TEST_PDB_CODE.upper()}.pdb"
 
 
-def _network_available():
-    try:
-        r = requests.get("https://proteins.plus/api/v2/", timeout=15)
-        return r.status_code < 500
-    except requests.RequestException:
-        return False
-
-
 pytestmark = pytest.mark.skipif(
-    not _network_available(),
+    not proteins_plus_reachable(),
     reason="ProteinsPlus API unreachable; skipping live Protoss integration test",
 )
 
@@ -67,10 +64,13 @@ def test_custom_pdb_upload_and_protoss_download(tmp_path):
     pdb_path.write_text(r.text)
     assert TEST_LIGAND in _hetatm_names(r.text)
 
-    pid = get_protoss.upload(str(pdb_path))
-    job = get_protoss.submit(pid)
-    get_protoss.download(job, str(protoss_path), "protein")
-    get_protoss.download(job, str(ligands_path), "ligands")
+    try:
+        pid = get_protoss.upload(str(pdb_path))
+        job = get_protoss.submit(pid)
+        get_protoss.download(job, str(protoss_path), "protein")
+        get_protoss.download(job, str(ligands_path), "ligands")
+    except PROTOSS_NETWORK_ERRORS as exc:
+        skip_if_protoss_unavailable(exc)
 
     assert set(job) == {"protein", "ligands"}
     assert os.path.getsize(protoss_path) > 0

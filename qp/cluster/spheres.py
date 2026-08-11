@@ -1069,9 +1069,16 @@ def compute_charge(spheres, structure, ligand_charge, center_residue):
                     # TODO: termini
                     c -= 1
 
-                # Check for charged N-terminus
-                if res_id in n_terminals \
-                    and res.has_id("N"): # exclude sugar chain terminus
+                # Check for charged N-terminus (NH3+ / Pro NH2+).
+                # Protoss may leave a "fake" N-terminus with a single amide-like H;
+                # H-capping then yields neutral NH2. NeighborSearch counts the N
+                # itself, so CN > 4 marks NH3+ / Pro-NH2+ (5 neighbors) but not
+                # capped NH2 (4 neighbors).
+                if (
+                    res_id in n_terminals
+                    and res.has_id("N")  # exclude sugar chain terminus
+                    and check_atom_valence(res, cluster_tree, "N", 4)
+                ):
                     c += 1
 
                 # Check for charged C-terminus
