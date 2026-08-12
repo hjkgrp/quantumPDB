@@ -97,23 +97,24 @@ def test_include_ligands_mode_3_excludes_nonwater_ligands(tmpdir):
 
 @pytest.mark.skipif(MISSING_LICENSE, reason="Modeller license not found")
 def test_get_residues_ter_starts_new_chain_bucket(tmpdir):
+    # REMARK 465 columns are fixed-width; pad so line[26] (insertion code) exists.
     pdb_text = """\
-REMARK 465     MISSING RESIDUES
-REMARK 465   M RES C SSSEQI
-REMARK 465     ALA A    3
-ATOM      1  N   ALA A   1      11.104  13.207   1.000  1.00  0.00           N
-ATOM      2  CA  ALA A   1      12.000  13.000   1.000  1.00  0.00           C
-ATOM      3  C   ALA A   1      13.000  13.000   1.000  1.00  0.00           C
-ATOM      4  O   ALA A   1      13.500  14.000   1.000  1.00  0.00           O
-ATOM      5  N   ALA A   2      14.000  13.000   1.000  1.00  0.00           N
-ATOM      6  CA  ALA A   2      15.000  13.000   1.000  1.00  0.00           C
-ATOM      7  C   ALA A   2      16.000  13.000   1.000  1.00  0.00           C
-ATOM      8  O   ALA A   2      16.500  14.000   1.000  1.00  0.00           O
-TER       9      ALA A   2
-ATOM     10  N   ALA B   1      21.104  13.207   1.000  1.00  0.00           N
-ATOM     11  CA  ALA B   1      22.000  13.000   1.000  1.00  0.00           C
-ATOM     12  C   ALA B   1      23.000  13.000   1.000  1.00  0.00           C
-ATOM     13  O   ALA B   1      23.500  14.000   1.000  1.00  0.00           O
+REMARK 465     MISSING RESIDUES                     
+REMARK 465   M RES C SSSEQI                         
+REMARK 465     ALA A    3                           
+ATOM      1  N   ALA A   1      11.104  13.207   1.000  1.00  0.00           N  
+ATOM      2  CA  ALA A   1      12.000  13.000   1.000  1.00  0.00           C  
+ATOM      3  C   ALA A   1      13.000  13.000   1.000  1.00  0.00           C  
+ATOM      4  O   ALA A   1      13.500  14.000   1.000  1.00  0.00           O  
+ATOM      5  N   ALA A   2      14.000  13.000   1.000  1.00  0.00           N  
+ATOM      6  CA  ALA A   2      15.000  13.000   1.000  1.00  0.00           C  
+ATOM      7  C   ALA A   2      16.000  13.000   1.000  1.00  0.00           C  
+ATOM      8  O   ALA A   2      16.500  14.000   1.000  1.00  0.00           O  
+TER       9      ALA A   2                                                          
+ATOM     10  N   ALA B   1      21.104  13.207   1.000  1.00  0.00           N  
+ATOM     11  CA  ALA B   1      22.000  13.000   1.000  1.00  0.00           C  
+ATOM     12  C   ALA B   1      23.000  13.000   1.000  1.00  0.00           C  
+ATOM     13  O   ALA B   1      23.500  14.000   1.000  1.00  0.00           O  
 END
 """
     pdb_path = os.path.join(tmpdir, "ter.pdb")
@@ -121,11 +122,10 @@ END
         f.write(pdb_text)
 
     AA = missing_loops.define_residues()
-    residues = missing_loops.get_residues(pdb_path, AA)
-    residues = missing_loops.clean_termini(residues)
+    residues = [chain for chain in missing_loops.get_residues(pdb_path, AA) if chain]
     assert len(residues) == 2
     assert [res[0][0] for res in residues[0]] == [1, 2, 3]
-    assert residues[0][-1][2] == "R"  # missing ALA A3 appended before TER cut
+    assert residues[0][-1][2] == "R"  # missing ALA A3 flushed at TER
     assert [res[0][0] for res in residues[1]] == [1]
 
 

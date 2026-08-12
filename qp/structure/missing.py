@@ -139,7 +139,7 @@ def get_residues(path, AA):
             if res in AA and (line[13] == " " or line[13] == "1"): # want only the first model
                 chain = line[19]
                 rid = int(line[21:26])
-                ic = line[26]
+                ic = line[26] if len(line) > 26 else " "
                 missing_residues.setdefault(chain, set()).add(((rid, ic), AA[res], "R"))
 
         elif line.startswith("REMARK 470   "):  # missing atoms
@@ -147,14 +147,14 @@ def get_residues(path, AA):
             if res in AA and (line[13] == " " or line[13] == "1"):
                 chain = line[19]
                 rid = int(line[20:24])
-                ic = line[24]
+                ic = line[24] if len(line) > 24 else " "
                 missing_residues.setdefault(chain, set()).add(((rid, ic), AA[res], "A"))
 
         elif line.startswith("ATOM") or line.startswith("HETATM"):
             res = line[17:20]
             chain = line[21]
             rid = int(line[22:26])
-            ic = line[26]
+            ic = line[26] if len(line) > 26 else " "
 
             if chain != cur:
                 residues.append([])

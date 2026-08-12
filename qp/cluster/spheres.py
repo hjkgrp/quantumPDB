@@ -1183,17 +1183,18 @@ def compute_charge(
             resname = res.get_resname()
             res_is_aa = Polypeptide.is_aa(res)
             if not residue_in_ligands(resname, res_id, res_is_aa, ligand_charge.keys()):
-                if resname in pos:
-                    if all(res.has_id(h) for h in pos[resname]):
-                        charge_debug("pos res +1", res)
+                # Keep main's `pos and all(H)` gate so residues also listed in
+                # `neg` (e.g. deprotonated HIS) can fall through to the neg branch.
+                if resname in pos and all(res.has_id(h) for h in pos[resname]):
+                    charge_debug("pos res +1", res)
+                    c += 1
+                elif resname == "LYS":
+                    check_flag, _ = check_atom_valence(
+                        res, sphere_tree, "NZ", 4, backbone=False, same_residue=True
+                    )
+                    if check_flag:
+                        charge_debug("LYS +1", res)
                         c += 1
-                    elif resname == "LYS":
-                        check_flag, _ = check_atom_valence(
-                            res, sphere_tree, "NZ", 4, backbone=False, same_residue=True
-                        )
-                        if check_flag:
-                            charge_debug("LYS +1", res)
-                            c += 1
                 elif resname in neg and all(not res.has_id(h) for h in neg[resname]):
                     RGP_flag = False
                     if resname == "CYS":
@@ -1212,14 +1213,11 @@ def compute_charge(
                         charge_debug("neg res -1", res)
                         c -= 1
                 if res_is_aa and resname != "PRO" and all(not res.has_id(h) for h in ["H", "H2"]):
-                    # TODO: termini
-                    if res.has_id("N"):
-                        check_flag, _ = check_atom_valence(
-                            res, sphere_tree, "N", 3, backbone=True
-                        )
-                        if not check_flag:
-                            charge_debug("backbone N -1", res)
-                            c -= 1
+                    # Deprotonated backbone amide (missing H/H2) is formally -1.
+                    # Do not gate on check_atom_valence: peptide C/CA neighbors are
+                    # expected, and metal–N coordination must not cancel this charge.
+                    charge_debug("backbone N -1", res)
+                    c -= 1
 
                 # Check for charged N-terminus (NH3+ / Pro NH2+).
                 # Protoss may leave a "fake" N-terminus with a single amide-like H;
