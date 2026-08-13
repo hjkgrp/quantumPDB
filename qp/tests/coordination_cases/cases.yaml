@@ -70,3 +70,13 @@ cases:
     pdb: 1jyn
     center_residues: [GAL]
     number_of_spheres: 2
+  - case: polymer_nucleotide
+    pdb: 4n48
+    center_residues: [SAM_G]
+    max_atom_count: 300
+    merge_distance_cutoff: 4.0
+  - case: COMT
+    pdb: 4xud
+    center_residues: [SAM_43H_MG]
+    max_atom_count: 300
+    merge_distance_cutoff: 4.0

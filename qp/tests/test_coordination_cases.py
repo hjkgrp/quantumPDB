@@ -73,7 +73,12 @@ def _parse_charge_csv(path: Path):
     i = 1
     while i < len(lines) and lines[i].strip():
         parts = lines[i].split(",")
-        sphere[parts[0]] = {c: int(parts[j + 1]) for j, c in enumerate(cols)}
+        # Rows may omit trailing spheres when a cluster has fewer shells.
+        sphere[parts[0]] = {
+            c: int(parts[j + 1])
+            for j, c in enumerate(cols)
+            if j + 1 < len(parts) and parts[j + 1] != ""
+        }
         i += 1
     i += 1  # blank
     while i < len(lines):
@@ -336,6 +341,21 @@ def _assert_terminal_ligand(tmp_path, pdb):
     assert ligands["BGC_E1 GAL_E2"] == 0
 
 
+def _assert_polymer_nucleotide(tmp_path, pdb):
+    sphere, _ = _parse_charge_csv(tmp_path / pdb / "charge.csv")
+    # Polymer A/MGT outside Protoss ligands: phosphate + N7 formal charges.
+    assert sphere["A601_D1"]["1"] == -4
+
+
+def _assert_comt(tmp_path, pdb):
+    from qp.manager.create import get_charge
+
+    cluster_dir = tmp_path / pdb / "A301_A302_A303"
+    assert cluster_dir.is_dir(), f"Missing cluster directory: {cluster_dir}"
+    charge, _ = get_charge(str(cluster_dir))
+    assert charge == 0
+
+
 ASSERTIONS = {
     "ASP_proton": _assert_asp_proton,
     "CSS_ligand": _assert_css_ligand,
@@ -354,4 +374,6 @@ ASSERTIONS = {
     "atom_count": _assert_atom_count,
     "polysacchride": _assert_polysacchride,
     "terminal_ligand": _assert_terminal_ligand,
+    "polymer_nucleotide": _assert_polymer_nucleotide,
+    "COMT": _assert_comt,
 }
