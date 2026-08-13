@@ -23,14 +23,14 @@ def welcome():
     click.secho("             ║        |__||__|        ║             ", bold=True)
     click.secho("             ║                        ║             ", bold=True)
     click.secho("             ║       QUANTUMPDB       ║             ", bold=True)
-    click.secho("             ║  [quantumpdb.rtfd.io]  ║             ", bold=True)
+    click.secho("             ║hjkgrpquantumpdb.rtfd.io║             ", bold=True)
     click.secho("             ╚═══════════╗╔═══════════╝             ", bold=True)
     click.secho("                 ╔═══════╝╚═══════╗                 ", bold=True)
     click.secho("                 ║ THE KULIK LAB  ║                 ", bold=True)
     click.secho("                 ╚═══════╗╔═══════╝                 ", bold=True)
     click.secho("  ╔══════════════════════╝╚══════════════════════╗  ", bold=True)
     click.secho("  ║   Code: github.com/davidkastner/quantumpdb   ║  ", bold=True)
-    click.secho("  ║   Docs: quantumpdb.readthedocs.io            ║  ", bold=True)
+    click.secho("  ║   Docs: hjkgrpquantumpdb.readthedocs.io      ║  ", bold=True)
     click.secho("  ║      - Clusters: qp run -c config.yaml       ║  ", bold=True)
     click.secho("  ║      - QM calcs: qp submit -c config.yaml    ║  ", bold=True)
     click.secho("  ╚══════════════════════════════════════════════╝\n", bold=True)
@@ -75,6 +75,7 @@ def run(config):
     input = config_data.get('input', [])
     output = config_data.get('output_dir', '')
     center_yaml_residues = config_data.get('center_residues', [])
+    backbone = config_data.get('find_backbone_atoms', False)
     force_include_yaml_residues = config_data.get('force_include_residues', [])
     force_remove_yaml_residues = config_data.get('force_remove_residues', [])
     pdb_all, center_residues, force_include_residues_all, force_remove_residues_all = setup.parse_input(
@@ -326,6 +327,26 @@ def run(config):
                     force_remove_residues=force_remove_residues,
                     **smooth_params
                 )
+                if backbone:
+                    from qp.cluster.get_backbone import search_backbone_atoms
+                    click.echo("> Searching for backbone atoms (C, CA, N, O)")
+                    for cluster_path in cluster_paths:
+                        cluster_dir = os.path.basename(cluster_path.rstrip('/'))
+                        pdb_file = os.path.join(cluster_path, f"{cluster_dir}.pdb")
+        
+                        if not os.path.exists(pdb_file):
+                            click.echo(f"  > PDB file not found: {pdb_file}")
+                            continue
+                        backbone_data = search_backbone_atoms(pdb_file)
+            
+                        backbone_output = pdb_file.replace(".pdb", "_backbone.txt")
+                        with open(backbone_output, "w") as f:
+                            f.write("Atom_ID\n")
+                            for index  in backbone_data:
+                                f.write(f"{index}\n")
+            
+                        click.echo(f"  > Found {len(backbone_data)} backbone atoms in {cluster_path}")
+                        click.echo(f"  > Saved to {backbone_output}")
 
                 if charge:
                     charge_csv_path = f"{output}/{pdb}/charge.csv"

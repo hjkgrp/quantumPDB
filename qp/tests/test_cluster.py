@@ -5,6 +5,36 @@ import glob
 import filecmp
 
 from qp.cluster import spheres
+from qp.cluster.spheres import CenterResidue
+
+
+FE_CENTER = CenterResidue("FE_FE2")
+SUGAR_CENTER = CenterResidue("BGC_GAL_NGA_SIA_NI")
+DNA_CENTER = CenterResidue("DT_B501-MA7_B502-DT_B503")
+
+
+@pytest.mark.parametrize(
+    "spec, mode, residues",
+    [
+        ("FE", "fuzzy", ["FE"]),
+        ("FE_FE2", "fuzzy", ["FE", "FE2"]),
+        ("FE_A199", "fuzzy", ["FE", "A199"]),
+        ("exact:FE_A199", "strict", ["FE_A199"]),
+        ("EXACT:FE_A199", "strict", ["FE_A199"]),
+        ("CU_A357-CU_A358", "strict", ["CU_A357", "CU_A358"]),
+        ("exact:FE_A155-HIS_A93", "strict", ["FE_A155", "HIS_A93"]),
+        ("DT_B501-MA7_B502-DT_B503", "strict", ["DT_B501", "MA7_B502", "DT_B503"]),
+    ],
+)
+def test_center_residue_parsing(spec, mode, residues):
+    center = CenterResidue(spec)
+    assert center.mode == mode
+    assert center.residue_list == residues
+
+
+def test_center_residue_exact_prefix_requires_key():
+    with pytest.raises(ValueError, match="exact:"):
+        CenterResidue("exact:")
 
 
 def check_clusters(path, out, metal_ids):
@@ -53,8 +83,8 @@ def test_extract_clusters(tmpdir, sample_cluster):
     pdb, metal_ids, path = sample_cluster
     pdb_path = os.path.join(path, "Protoss", f"{pdb}_protoss.pdb")
     spheres.extract_clusters(
-        pdb_path, tmpdir, ["FE", "FE2"],
-        smooth_method="dummy_atom", mean_distance=3
+        pdb_path, tmpdir, FE_CENTER,
+        smooth_method="dummy_atom", mean_distance=3, capping=0
     )
     check_clusters(path, tmpdir, metal_ids)
 
@@ -64,7 +94,7 @@ def test_cap_heavy(tmpdir, sample_cluster):
     pdb, metal_ids, path = sample_cluster
     pdb_path = os.path.join(path, "Protoss", f"{pdb}_protoss.pdb")
     spheres.extract_clusters(
-        pdb_path, tmpdir, ["FE", "FE2"], capping=2, 
+        pdb_path, tmpdir, FE_CENTER, capping=2,
         smooth_method="dummy_atom", mean_distance=3
     )
     check_clusters(path, tmpdir, metal_ids)
@@ -75,8 +105,8 @@ def test_box_plot(tmpdir, sample_cluster):
     pdb, metal_ids, path = sample_cluster
     pdb_path = os.path.join(path, "Protoss", f"{pdb}_protoss.pdb")
     spheres.extract_clusters(
-        pdb_path, tmpdir, ["FE", "FE2"],
-        smooth_method="box_plot"
+        pdb_path, tmpdir, FE_CENTER,
+        smooth_method="box_plot", capping=0
     )
     check_clusters(path, tmpdir, metal_ids)
 
@@ -86,8 +116,8 @@ def test_dbscan(tmpdir, sample_cluster):
     pdb, metal_ids, path = sample_cluster
     pdb_path = os.path.join(path, "Protoss", f"{pdb}_protoss.pdb")
     spheres.extract_clusters(
-        pdb_path, tmpdir, ["FE", "FE2"], 
-        smooth_method="dbscan", eps=6, min_samples=3
+        pdb_path, tmpdir, FE_CENTER,
+        smooth_method="dbscan", eps=6, min_samples=3, capping=0
     )
     check_clusters(path, tmpdir, metal_ids)
 
@@ -106,9 +136,9 @@ def test_merge_centers(tmpdir, sample_cluster):
     pdb, metal_ids, path = sample_cluster
     pdb_path = os.path.join(path, "Protoss", f"{pdb}_protoss.pdb")
     spheres.extract_clusters(
-        pdb_path, tmpdir, ["BGC", "GAL", "NGA", "SIA", "NI"],
+        pdb_path, tmpdir, SUGAR_CENTER,
         merge_cutoff=4.0,
-        smooth_method="dummy_atom", mean_distance=3
+        smooth_method="dummy_atom", mean_distance=3, capping=0
     )
     check_clusters(path, tmpdir, metal_ids)
 
@@ -118,9 +148,9 @@ def test_prune_atoms(tmpdir, sample_cluster):
     pdb, metal_ids, path = sample_cluster
     pdb_path = os.path.join(path, "Protoss", f"{pdb}_protoss.pdb")
     spheres.extract_clusters(
-        pdb_path, tmpdir, ["DT", "MA7"],
+        pdb_path, tmpdir, DNA_CENTER,
         max_atom_count=102, merge_cutoff=2.0,
-        smooth_method="dummy_atom", mean_distance=3
+        smooth_method="dummy_atom", mean_distance=3, capping=0
     )
     check_clusters(path, tmpdir, metal_ids)
 
@@ -307,41 +337,20 @@ def test_force_remove_residues_multiple(tmpdir):
         )
 
 
-def test_force_remove_residues_not_present(tmpdir):
+@pytest.mark.parametrize("sample_cluster", [("3a8g", ("A301",))], indirect=True)
+def test_force_remove_residues_not_present(tmpdir, sample_cluster):
     """force_remove_residues naming a residue that was never part of the
-    cluster should be a harmless no-op -- output identical to a plain run.
-
-    Compares against a fresh baseline run rather than the golden fixture
-    (check_clusters): golden-file byte comparison is unreliable in this
-    environment for reasons unrelated to this feature -- see
-    plans/open_questions_issues.md (A2)."""
-    from qp.cluster.spheres import CenterResidue
-
-    path = os.path.join(os.path.dirname(__file__), "samples", "3a8g")
-    pdb_path = os.path.join(path, "Protoss", "3a8g_protoss.pdb")
-    center_residue = CenterResidue("FE")
-
-    baseline = tmpdir.mkdir("baseline")
-    spheres.extract_clusters(
-        pdb_path, str(baseline), center_residue,
-        smooth_method="dummy_atom", mean_distance=3
-    )
+    cluster should be a harmless no-op -- output identical to a plain run."""
+    pdb, metal_ids, path = sample_cluster
+    pdb_path = os.path.join(path, "Protoss", f"{pdb}_protoss.pdb")
 
     # GLU_A9 is not reached by sphere growth (see test_force_include_residues)
-    no_op = tmpdir.mkdir("no_op")
     spheres.extract_clusters(
-        pdb_path, str(no_op), center_residue,
-        smooth_method="dummy_atom", mean_distance=3,
+        pdb_path, tmpdir, FE_CENTER,
+        smooth_method="dummy_atom", mean_distance=3, capping=0,
         force_remove_residues=["GLU_A9"]
     )
-
-    sphere_count = len(glob.glob(os.path.join(str(baseline), "A301", "?.pdb")))
-    for i in range(sphere_count):
-        baseline_pdb = os.path.join(str(baseline), "A301", f"{i}.pdb")
-        no_op_pdb = os.path.join(str(no_op), "A301", f"{i}.pdb")
-        assert filecmp.cmp(baseline_pdb, no_op_pdb), (
-            f"Sphere {i} differs when force_remove_residues names an absent residue"
-        )
+    check_clusters(path, tmpdir, metal_ids)
 
 
 def test_force_include_force_remove_conflict(tmpdir):
@@ -367,26 +376,20 @@ def test_force_include_force_remove_conflict(tmpdir):
     )
 
 
-def test_force_remove_residues_center_protected(tmpdir, capsys):
+@pytest.mark.parametrize("sample_cluster", [("3a8g", ("A301",))], indirect=True)
+def test_force_remove_residues_center_protected(tmpdir, sample_cluster, capsys):
     """force_remove_residues cannot remove the cluster's center; the
-    request is ignored with a warning instead."""
-    from qp.cluster.spheres import CenterResidue
-
-    path = os.path.join(os.path.dirname(__file__), "samples", "3a8g")
-    pdb_path = os.path.join(path, "Protoss", "3a8g_protoss.pdb")
-    center_residue = CenterResidue("FE")
-
-    def cluster_pdb(out):
-        return os.path.join(out, "A301", "A301.pdb")
+    request is ignored with a warning, and the output is otherwise
+    identical to a plain run (blocked removal is a no-op)."""
+    pdb, metal_ids, path = sample_cluster
+    pdb_path = os.path.join(path, "Protoss", f"{pdb}_protoss.pdb")
 
     spheres.extract_clusters(
-        pdb_path, str(tmpdir), center_residue,
-        smooth_method="dummy_atom", mean_distance=3,
+        pdb_path, tmpdir, FE_CENTER,
+        smooth_method="dummy_atom", mean_distance=3, capping=0,
         force_remove_residues=["FE_A301"]
     )
-    assert residue_atom_lines(cluster_pdb(str(tmpdir)), "FE", "A", 301), (
-        "The cluster center was removed despite the center-protection rule"
-    )
+    check_clusters(path, tmpdir, metal_ids)
     assert "was not removed" in capsys.readouterr().out
 
 
@@ -497,11 +500,12 @@ def test_cluster_name_template(tmpdir, sample_cluster):
     pdb, metal_ids, path = sample_cluster
     pdb_path = os.path.join(path, "Protoss", f"{pdb}_protoss.pdb")
     spheres.extract_clusters(
-        pdb_path, tmpdir, ["BGC", "GAL", "NGA", "SIA", "NI"],
+        pdb_path, tmpdir, SUGAR_CENTER,
         merge_cutoff=4.0,
         smooth_method="dummy_atom", mean_distance=3,
         first_sphere_radius=4.0,
-        cluster_name_template="A_{radius}"
+        cluster_name_template="A_{radius}",
+        capping=0,
     )
 
     expected_names = ["A_4", "A_4_1", "A_4_2", "A_4_3", "A_4_4"]
@@ -548,7 +552,7 @@ def test_cluster_name_template_bad_field(tmpdir):
     with pytest.raises(ValueError, match="cluster_name_template"):
         spheres.extract_clusters(
             os.path.join(os.path.dirname(__file__), "samples", "1lm6", "Protoss", "1lm6_protoss.pdb"),
-            tmpdir, ["FE", "FE2"],
+            tmpdir, FE_CENTER,
             smooth_method="box_plot",
             cluster_name_template="A_{not_a_real_field}"
         )
