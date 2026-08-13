@@ -16,6 +16,7 @@ max_atom_count: 750
 center_residues: [FE, FE2]             # Residue name to use as the cluster center
 additional_ligands: []                 # Residues beyond first sphere to include
 force_include_residues: []                # Specific protein residues to force-include, e.g. [HIS_A123]; RESNAME_CHAINID format, see docs
+force_remove_residues: []              # Specific protein residues to force-exclude, e.g. [HIS_A123]; RESNAME_CHAINID format, see docs
 number_of_spheres: 3                   # Coordination spheres to generate
 radius_of_first_sphere: 4.0            # Distance based cut off to determine first sphere
 include_ligands: 2                     # Only ligands and waters in first sphere (0), Only non-water ligands (1), Everything (2)

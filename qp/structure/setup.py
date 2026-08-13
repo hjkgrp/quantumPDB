@@ -26,15 +26,15 @@ def read_config(config_file):
         return yaml.safe_load(file)
 
 
-def parse_input(input, output, center_yaml_residues, force_include_yaml_residues=None):
+def parse_input(input, output, center_yaml_residues, force_include_yaml_residues=None, force_remove_yaml_residues=None):
     """Parse input sources and determine center residues for each structure.
 
     Processes the user-provided input (PDB codes, file paths, or CSV) and
     determines the center residue definitions from either the CSV ``center``
     column or the YAML ``center_residues`` parameter. Also resolves the
-    per-PDB ``force_include_residues`` list from either the CSV
-    ``force_include_residues`` column or the YAML ``force_include_residues``
-    parameter, using the same CSV-takes-priority precedence as centers.
+    per-PDB ``force_include_residues`` and ``force_remove_residues`` lists
+    from either their CSV column or their YAML parameter, using the same
+    CSV-takes-priority precedence as centers.
 
     Parameters
     ----------
@@ -49,17 +49,22 @@ def parse_input(input, output, center_yaml_residues, force_include_yaml_residues
         ``'HIS_A123'``) from the YAML config file, applied to every PDB
         when the CSV has no ``force_include_residues`` column (default None,
         treated as []).
+    force_remove_yaml_residues : list, optional
+        Protein residue keys (``'RESNAME_CHAINID'``) to force-exclude, from
+        the YAML config file, applied to every PDB when the CSV has no
+        ``force_remove_residues`` column (default None, treated as []).
 
     Returns
     -------
-    tuple of (list, list, list)
-        ``(pdb_all, center_residues, force_include_residues)`` where
-        ``pdb_all`` is a list of ``(pdb_id, pdb_path, source_cif)`` tuples,
-        ``center_residues`` is a list of center definition strings, and
-        ``force_include_residues`` is a list (one entry per PDB) of lists of
-        ``'RESNAME_CHAINID'`` residue keys to force-include for that PDB.
-        ``source_cif`` is a local mmCIF path when the user supplied
-        ``.cif``/``.mmcif``, otherwise ``None``.
+    tuple of (list, list, list, list)
+        ``(pdb_all, center_residues, force_include_residues,
+        force_remove_residues)`` where ``pdb_all`` is a list of
+        ``(pdb_id, pdb_path, source_cif)`` tuples, ``center_residues`` is a
+        list of center definition strings, and ``force_include_residues``/
+        ``force_remove_residues`` are each a list (one entry per PDB) of
+        lists of ``'RESNAME_CHAINID'`` residue keys to force-include/exclude
+        for that PDB. ``source_cif`` is a local mmCIF path when the user
+        supplied ``.cif``/``.mmcif``, otherwise ``None``.
 
     Raises
     ------
@@ -73,6 +78,7 @@ def parse_input(input, output, center_yaml_residues, force_include_yaml_residues
     output = os.path.abspath(output)
     center_csv_residues = get_centers(input)
     force_include_csv_residues = get_force_include_residues(input)
+    force_remove_csv_residues = get_force_remove_residues(input)
     pdb_all = get_pdbs(input, output)
 
     # Determine how the user has decided to provide the center residues
@@ -101,7 +107,14 @@ def parse_input(input, output, center_yaml_residues, force_include_yaml_residues
     else:
         force_include_residues = [list(force_include_yaml_residues or []) for _ in pdb_all]
 
-    return pdb_all, center_residues, force_include_residues
+    # Determine the force-excluded residues for each PDB
+    if force_remove_csv_residues:
+        print("> Using force-excluded residues from the input csv\n")
+        force_remove_residues = [[t for t in row.split("-") if t] for row in force_remove_csv_residues]
+    else:
+        force_remove_residues = [list(force_remove_yaml_residues or []) for _ in pdb_all]
+
+    return pdb_all, center_residues, force_include_residues, force_remove_residues
 
 
 def fetch_pdb(pdb, out):
@@ -330,3 +343,43 @@ def get_force_include_residues(input_path):
                     for row in reader:
                         force_include_residues.append(row.get('force_include_residues', None) or "")
     return force_include_residues
+
+
+def get_force_remove_residues(input_path):
+    """
+    Parses the input csv's ``force_remove_residues`` column, one entry per row.
+
+    Unlike ``get_centers``, blank cells append an empty string rather than
+    being skipped, since ``force_remove_residues`` is optional per PDB and the
+    returned list must stay aligned with the CSV's rows.
+
+    Parameters
+    ----------
+    input_path: list
+        List of pdbs or the input csv file.
+
+    Returns
+    -------
+    force_remove_residues: list
+        List of raw ``force_remove_residues`` cell values (dash-separated
+        ``'RESNAME_CHAINID'`` tokens, or ``""``), one per CSV row. Empty
+        list if no CSV with an ``force_remove_residues`` column is present.
+    """
+
+    force_remove_residues = []
+    for pdb_id in input_path:
+        if os.path.isfile(pdb_id):
+            pdb, ext = os.path.splitext(os.path.basename(pdb_id))
+            pdb = pdb.replace(".", "_")
+            if ext == ".csv":
+                input_csv = pdb_id
+                with open(input_csv, "r") as csvfile:
+                    reader = csv.DictReader(csvfile)
+                    # Check if 'force_remove_residues' column exists
+                    if 'force_remove_residues' not in reader.fieldnames:
+                        print(f"> WARNING: The 'force_remove_residues' option is not being used in {input_csv}. Returning empty list.")
+                        return []
+                    # If the column exists, proceed to collect its values
+                    for row in reader:
+                        force_remove_residues.append(row.get('force_remove_residues', None) or "")
+    return force_remove_residues

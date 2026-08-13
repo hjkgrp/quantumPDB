@@ -82,6 +82,17 @@ cluster extraction).
        residue and protected from ``max_atom_count`` pruning. Can also be
        set per PDB via an ``force_include_residues`` CSV column, which takes
        priority over this YAML list when present. See :doc:`input_formats`.
+   * - ``force_remove_residues``
+     - ``[]``
+     - List of specific protein residues to force-exclude, given as
+       ``RESNAME_CHAINID`` keys (e.g., ``[HIS_A123]``), even if sphere
+       growth, ``additional_ligands``, or ``force_include_residues`` would
+       otherwise include them. On conflict with ``force_include_residues``,
+       removal wins. Cannot remove the cluster's center (ignored with a
+       warning). Shrink-only: does not backfill toward ``max_atom_count``.
+       Can also be set per PDB via a ``force_remove_residues`` CSV column,
+       which takes priority over this YAML list when present. See
+       :doc:`input_formats`.
    * - ``number_of_spheres``
      - ``2``
      - Number of interaction spheres to construct. More spheres capture more

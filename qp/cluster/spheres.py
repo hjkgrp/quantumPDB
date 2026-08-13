@@ -10,7 +10,8 @@
     ...     center_residues=["FE", "FE2"], # List of resnames of the residues to use as the cluster center
     ...     sphere_count=2,              # Number of spheres to extract
     ...     ligands=["AKG"],       # PDB IDs of additional ligands
-    ...     force_include_residues=["HIS_A123"] # Specific protein residues to force-include
+    ...     force_include_residues=["HIS_A123"], # Specific protein residues to force-include
+    ...     force_remove_residues=["HIS_A45"] # Specific protein residues to force-exclude
     ... )
 
 Extracting clusters leaves open valences in the outermost sphere. Capping may be
@@ -1210,6 +1211,48 @@ def add_force_include_residues(model, residues, spheres, force_include_residues)
     return matched
 
 
+def remove_force_remove_residues(residues, spheres, force_remove_residues, center):
+    """Force-exclude specific protein residues, even if sphere growth,
+    ``additional_ligands``, or ``force_include_residues`` would have
+    included them.
+
+    No model search is needed here (unlike ``add_force_include_residues``):
+    a residue that isn't already in ``residues`` has nothing to remove.
+
+    Parameters
+    ----------
+    residues : set
+        Current set of extracted residues (modified in place).
+    spheres : list of set
+        Sphere-separated residue sets (modified in place).
+    force_remove_residues : list of str
+        Residue keys to force-exclude, in ``'RESNAME_CHAINID'`` format
+        (e.g. ``'HIS_A123'``), matching ``make_res_key``.
+    center : set
+        The cluster's center residue(s). Removal requests matching the
+        center are ignored (with a warning) rather than honored, since
+        removing the center would make the cluster meaningless.
+    """
+    requested = set(force_remove_residues)
+    if not requested:
+        return
+    center_keys = {make_res_key(res) for res in center}
+    remove = set()
+    for res in list(residues):
+        res_key = make_res_key(res)
+        if res_key in requested:
+            if res_key in center_keys:
+                print(f"> WARNING: force_remove_residues entry {res_key!r} is part of the cluster center and was not removed")
+                continue
+            remove.add(res)
+            print(f"> {res_key} removed from cluster via force_remove_residues")
+    residues -= remove
+    for s in spheres:
+        s -= remove
+    while spheres and not spheres[-1]:
+        spheres.pop()
+
+
 def extract_clusters(
     path,
     out,
@@ -1229,6 +1272,7 @@ def extract_clusters(
     include_ligands=2,
     cluster_name_template=None,
     force_include_residues=[],
+    force_remove_residues=[],
     **smooth_params
 ):
     """Extract active site coordination spheres using Voronoi tessellation.
@@ -1279,6 +1323,14 @@ def extract_clusters(
         spheres. These residues are added to the outermost sphere, capped
         like any other extracted residue, and protected from
         ``max_atom_count`` pruning (default []).
+    force_remove_residues : list, optional
+        Specific protein residues to force-exclude, in ``'RESNAME_CHAINID'``
+        format, even if sphere growth, ``ligands``, or
+        ``force_include_residues`` would otherwise have included them.
+        Applied after ``force_include_residues``, so on conflict removal
+        wins. Cannot remove the cluster's center (ignored with a warning
+        instead). Shrink-only: nothing backfills the cluster to compensate
+        (default []).
     cluster_name_template : str, optional
         Python format-string controlling cluster directory/file names.
         Defaults to ``None``, which preserves the original behavior of
@@ -1342,6 +1394,7 @@ def extract_clusters(
         )
         complete_oligomer(ligand_charge, model, residues, spheres, include_ligands)
         added_residues = add_force_include_residues(model, residues, spheres, force_include_residues)
+        remove_force_remove_residues(residues, spheres, force_remove_residues, c)
 
         if cluster_name_template:
             name_fields = {

@@ -76,8 +76,9 @@ def run(config):
     output = config_data.get('output_dir', '')
     center_yaml_residues = config_data.get('center_residues', [])
     force_include_yaml_residues = config_data.get('force_include_residues', [])
-    pdb_all, center_residues, force_include_residues_all = setup.parse_input(
-        input, output, center_yaml_residues, force_include_yaml_residues
+    force_remove_yaml_residues = config_data.get('force_remove_residues', [])
+    pdb_all, center_residues, force_include_residues_all, force_remove_residues_all = setup.parse_input(
+        input, output, center_yaml_residues, force_include_yaml_residues, force_remove_yaml_residues
     )
 
     if modeller:
@@ -135,6 +136,8 @@ def run(config):
                         center_residues.pop(0)
                     if force_include_residues_all:
                         force_include_residues_all.pop(0)
+                    if force_remove_residues_all:
+                        force_remove_residues_all.pop(0)
                     continue
                 except ValueError as e:
                     # Catches invalid PDB ID / conversion failures
@@ -144,6 +147,8 @@ def run(config):
                         center_residues.pop(0)
                     if force_include_residues_all:
                         force_include_residues_all.pop(0)
+                    if force_remove_residues_all:
+                        force_remove_residues_all.pop(0)
                     continue
                 except IOError as e:
                     # Catches network and server issues
@@ -153,6 +158,8 @@ def run(config):
                         center_residues.pop(0)
                     if force_include_residues_all:
                         force_include_residues_all.pop(0)
+                    if force_remove_residues_all:
+                        force_remove_residues_all.pop(0)
                     continue
             
             # Extract the current center residue from the list of all residues
@@ -165,6 +172,7 @@ def run(config):
                 resname_map=remap.get("resname_map"),
             )
             force_include_residues = force_include_residues_all.pop(0) if force_include_residues_all else []
+            force_remove_residues = force_remove_residues_all.pop(0) if force_remove_residues_all else []
             click.echo(f"> Using center residue: {center_residue}")
             if remap.get("resname_map"):
                 click.echo(
@@ -315,6 +323,7 @@ def run(config):
                     ligands, capping, charge, ligand_charge, count, xyz, hetero_pdb, include_ligands,
                     cluster_name_template=cluster_name_template,
                     force_include_residues=force_include_residues,
+                    force_remove_residues=force_remove_residues,
                     **smooth_params
                 )
 
@@ -419,7 +428,7 @@ def analyze(config):
     input = config_data.get('input', [])
     output = config_data.get('output_dir', '')
     center_yaml_residues = config_data.get('center_residues', [])
-    pdb_all, center_residues, _ = setup.parse_input(input, output, center_yaml_residues)
+    pdb_all, center_residues, _, _ = setup.parse_input(input, output, center_yaml_residues)
 
     if job_checkup:
         from qp.analyze import checkup
