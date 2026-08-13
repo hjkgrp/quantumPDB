@@ -80,3 +80,8 @@ cases:
     center_residues: [SAM_43H_MG]
     max_atom_count: 300
     merge_distance_cutoff: 4.0
+  - case: isopeptide
+    pdb: 1JG3
+    center_residues: [ADN_IAS]
+    max_atom_count: 300
+    merge_distance_cutoff: 6.0

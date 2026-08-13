@@ -356,6 +356,20 @@ def _assert_comt(tmp_path, pdb):
     assert charge == 0
 
 
+def _assert_isopeptide(tmp_path, pdb):
+    from qp.manager.create import get_charge
+
+    _, ligands = _parse_charge_csv(tmp_path / pdb / "charge.csv")
+    assert ligands["IAS_C4"] == -1
+    assert ligands["IAS_D4"] == -1
+
+    for cluster_id, expected in (("A500_C4", -2), ("B550_D4", -1)):
+        cluster_dir = tmp_path / pdb / cluster_id
+        assert cluster_dir.is_dir(), f"Missing cluster directory: {cluster_dir}"
+        charge, _ = get_charge(str(cluster_dir))
+        assert charge == expected, f"{cluster_id}: expected {expected}, got {charge}"
+
+
 ASSERTIONS = {
     "ASP_proton": _assert_asp_proton,
     "CSS_ligand": _assert_css_ligand,
@@ -376,4 +390,5 @@ ASSERTIONS = {
     "terminal_ligand": _assert_terminal_ligand,
     "polymer_nucleotide": _assert_polymer_nucleotide,
     "COMT": _assert_comt,
+    "isopeptide": _assert_isopeptide,
 }

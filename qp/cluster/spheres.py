@@ -1007,6 +1007,54 @@ def build_o3prime_hydrogen(parent: Residue) -> Optional[Atom]:
     return atom
 
 
+def ias_cg_isopeptide_linked(res: Residue, tree: NeighborSearch) -> bool:
+    """True if IAS CG is amide-linked to another residue's N (isopeptide)."""
+    if not res.has_id("CG"):
+        return False
+    for neighbor in tree.search(res["CG"].get_coord(), radius=1.8):
+        if neighbor.get_parent() is res:
+            continue
+        if neighbor.element == "N" and neighbor.get_name() == "N":
+            return True
+    return False
+
+
+def hetero_residue_formal_charge(
+    res: Residue,
+    tree: NeighborSearch,
+    n_terminals: set,
+) -> int:
+    """Formal charge for sphere-0 heteros missing from the Protoss SDF.
+
+    Mirrors the AA-loop N-terminus / OXT rules so residues such as IAS keep
+    their α-carboxylate (-1) when Protoss omits them from ligands.sdf. IAS
+    also gets ASP-like sidechain -1 only when OD1/OD2 are present and CG is
+    not isopeptide-linked to another residue.
+    """
+    c = 0
+    res_id = res.get_full_id()
+    resname = res.get_resname().strip()
+    if res.has_id("N") and res_id in n_terminals and (resname != "PRO" or res.has_id("H")):
+        c += 1
+    elif res.has_id("N"):
+        check_flag, _ = check_atom_valence(res, tree, "N", 4, backbone=False)
+        if check_flag:
+            c += 1
+    if res.has_id("OXT"):
+        check_flag, _ = check_atom_valence(res, tree, "OXT", 2, backbone=False)
+        if not check_flag:
+            c -= 1
+    if (
+        resname == "IAS"
+        and res.has_id("OD1")
+        and res.has_id("OD2")
+        and all(not res.has_id(h) for h in ["HD2", "HOD1", "HOD2"])
+        and not ias_cg_isopeptide_linked(res, tree)
+    ):
+        c -= 1
+    return c
+
+
 def cap_chains(
     model: Model,
     residues: Set[Residue],
@@ -1308,7 +1356,6 @@ def compute_charge(
         s0 = spheres[0]
         sphere_tree = NeighborSearch([atom for res in s0 for atom in res.get_atoms()])
         for res in s0:
-            c = 0
             res_id = res.get_full_id()
             resname = res.get_resname()
             res_is_aa = Polypeptide.is_aa(res)
@@ -1320,16 +1367,9 @@ def compute_charge(
                 # not the ligand CSV map (Protoss already covers true ligands).
                 if resname_key in RNA_POLYMER_RESNAMES or resname_key in MGT_RESNAMES:
                     continue
-                if res.has_id("N") and res_id in n_terminals and (resname != "PRO" or res.has_id("H")):
-                    # sometimes PRO has no H atom on N-terminus (Protoss's fault)
-                    c += 1
-                elif res.has_id("N"):
-                    check_flag, _ = check_atom_valence(
-                        res, sphere_tree, "N", 4, backbone=False
-                    )
-                    if check_flag:
-                        c += 1
-                ligand_charge[make_res_key(res)] = c
+                ligand_charge[make_res_key(res)] = hetero_residue_formal_charge(
+                    res, sphere_tree, n_terminals
+                )
 
     for s in spheres[start_sphere_id:]:
         sphere_tree = NeighborSearch([atom for res in s for atom in res.get_atoms()])
