@@ -94,6 +94,12 @@ celerybeat-schedule
 venv/
 ENV/
 
+# Local planning/status notes -- not part of the published repo
+plans/
+
+# Local planning/status notes -- not part of the published repo
+plans/
+
 # Spyder project settings
 .spyderproject
 .spyproject
