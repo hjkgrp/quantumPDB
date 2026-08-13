@@ -16,8 +16,10 @@ Extracting clusters leaves open valences in the outermost sphere. Capping may be
 performed by specifying ``capping`` in ``spheres.extract_clusters``:
 
 * 0. No capping. (Default)
-* 1. Cap with hydrogens.
-* 2. Cap with ACE/NME groups. 
+* 1. Cap with hydrogens. Proteins: N/C termini. Non-ligand A/C/G/U: O3'–H
+  at strand breaks.
+* 2. Cap with ACE/NME groups (proteins only). Non-ligand A/C/G/U still use
+  O3'–H caps when ``capping`` is non-zero.
 """
 
 import os
@@ -44,6 +46,15 @@ HX_BOND_LENGTH = {
     "O": 0.98,
     "S": 1.35,
 }
+
+# RNA bases that may appear as polymer residues without a Protoss ligand entry.
+RNA_POLYMER_RESNAMES = frozenset({"A", "C", "G", "U"})
+# m7GTP / similar residues: triphosphate + N7-methyl formal charges.
+MGT_RESNAMES = frozenset({"MGT"})
+
+O_H_BOND = 0.97
+_TET_COS = np.cos(np.deg2rad(109.5))
+_TET_SIN = np.sin(np.deg2rad(109.5))
 
 CHARGE_DEBUG_FLAG = False
 
@@ -878,11 +889,130 @@ def check_atom_valence(
     return check_flag, neighbors
 
 
+def primed_atom_names(name: str) -> tuple:
+    """Return PDB atom-name variants for primed sugar atoms (O3'/O3*)."""
+    if name.endswith("'"):
+        return (name, name[:-1] + "*")
+    if name.endswith("*"):
+        return (name, name[:-1] + "'")
+    return (name,)
+
+
+def get_res_atom(res: Residue, name: str) -> Optional[Atom]:
+    """Get an atom from ``res``, accepting both ``'`` and ``*`` primed names."""
+    for candidate in primed_atom_names(name):
+        if res.has_id(candidate):
+            return res[candidate]
+    return None
+
+
+def has_res_atom(res: Residue, name: str) -> bool:
+    """Return True if ``res`` has ``name`` under either primed spelling."""
+    return get_res_atom(res, name) is not None
+
+
+def o3prime_atom_name(res: Residue) -> Optional[str]:
+    """Return the in-residue O3'/O3* atom name, or None if absent."""
+    for candidate in primed_atom_names("O3'"):
+        if res.has_id(candidate):
+            return candidate
+    return None
+
+
+def atom_coordination_is_one(
+    res: Residue, tree: NeighborSearch, atom: str
+) -> bool:
+    """True when ``atom`` has formal coordination number 1 (unsaturated).
+
+    Uses :func:`check_atom_valence` with ``cn=2`` and ``backbone=False``:
+    self + one bonded neighbor → unsaturated; an extra H/metal saturates it.
+    """
+    if not res.has_id(atom):
+        return False
+    check_flag, _ = check_atom_valence(res, tree, atom, 2, backbone=False)
+    return not check_flag
+
+
+def phosphate_terminal_pair_charge(
+    res: Residue, tree: NeighborSearch, o1: str, o2: str
+) -> int:
+    """Return -1 when both terminal phosphate oxygens have CN == 1."""
+    if atom_coordination_is_one(res, tree, o1) and atom_coordination_is_one(
+        res, tree, o2
+    ):
+        return -1
+    return 0
+
+
+def polymer_nucleotide_charge(res: Residue, tree: NeighborSearch) -> int:
+    """Formal charge for A/C/G/U or MGT absent from the Protoss ligand SDF."""
+    resname = res.get_resname().strip()
+    c = 0
+    if resname in RNA_POLYMER_RESNAMES:
+        c += phosphate_terminal_pair_charge(res, tree, "OP1", "OP2")
+    elif resname in MGT_RESNAMES:
+        for o1, o2 in (("O1A", "O2A"), ("O1B", "O2B"), ("O1G", "O2G")):
+            c += phosphate_terminal_pair_charge(res, tree, o1, o2)
+        if res.has_id("N7"):
+            c += 1
+    return c
+
+
+def _unit_vec(v: np.ndarray) -> np.ndarray:
+    n = np.linalg.norm(v)
+    if n < 1e-9:
+        raise ValueError("zero-length vector")
+    return v / n
+
+
+def _perpendicular(a: np.ndarray) -> np.ndarray:
+    ref = np.array([1.0, 0.0, 0.0])
+    if abs(np.dot(ref, a)) > 0.9:
+        ref = np.array([0.0, 1.0, 0.0])
+    return _unit_vec(ref - np.dot(ref, a) * a)
+
+
+def o3prime_has_hydrogen(parent: Residue) -> bool:
+    """True if O3' already carries an in-residue hydroxyl hydrogen."""
+    o3 = get_res_atom(parent, "O3'")
+    if o3 is None:
+        return False
+    if has_res_atom(parent, "HO3'") or has_res_atom(parent, "H3'"):
+        return True
+    o = o3.get_coord()
+    for atom in parent.get_atoms():
+        if atom.element not in ("H", "D"):
+            continue
+        if float(np.linalg.norm(atom.get_coord() - o)) < 1.2:
+            return True
+    return False
+
+
+def build_o3prime_hydrogen(parent: Residue) -> Optional[Atom]:
+    """Cap a dangling O3' with hydrogen (3'-OH link-atom cap)."""
+    if o3prime_has_hydrogen(parent):
+        return None
+    o3 = get_res_atom(parent, "O3'")
+    c3 = get_res_atom(parent, "C3'")
+    if o3 is None or c3 is None:
+        return None
+
+    o_coord = o3.get_coord()
+    a = _unit_vec(c3.get_coord() - o_coord)
+    direction = _unit_vec(_TET_COS * a + _TET_SIN * _perpendicular(a))
+    pos = o_coord + O_H_BOND * direction
+    name = "HO3'"
+    atom = Atom(name, pos, 0, 1, " ", name, None, "H")
+    parent.add(atom)
+    return atom
+
+
 def cap_chains(
     model: Model,
     residues: Set[Residue],
     capping: int,
     RGP_atoms: Optional[Dict[str, Dict[int, Dict[str, Any]]]] = None,
+    ligand_charge: Optional[dict] = None,
 ) -> Set[Residue]:
     """
     Cap chain breaks for a set of extracted residues
@@ -894,9 +1024,13 @@ def cap_chains(
     residues: set
         Set of residues
     capping: int
-        Flag for capping group, H (1) or ACE/NME (2)
+        Flag for capping group, H (1) or ACE/NME (2). Non-ligand A/C/G/U
+        always receive O3'–H caps when ``capping`` is non-zero.
     RGP_atoms: dict, optional
         RGP atom information used to place hydrogens at missing R# sites
+    ligand_charge: dict, optional
+        Protoss ligand charge map; residues present here (including oligomer
+        members) are skipped for polymer nucleotide O3' capping.
 
     Returns
     -------
@@ -905,6 +1039,9 @@ def cap_chains(
     """
     if RGP_atoms is None:
         RGP_atoms = {}
+    if ligand_charge is None:
+        ligand_charge = {}
+    ligand_keys = ligand_charge.keys()
     orig_chains = {}
     for chain in model:
         orig_chains[chain.get_id()] = chain.get_unpacked_list()
@@ -932,13 +1069,27 @@ def cap_chains(
                             name = f"H{i}"
                             break
                     res.add(Atom(name, pos, 0, 1, " ", name, None, "H"))
+
+        res_id = res.get_full_id()
+        resname = res.get_resname().strip()
+        # Polymer RNA bases missing from Protoss ligands: H-cap dangling O3'.
+        if resname in RNA_POLYMER_RESNAMES and not residue_in_ligands(
+            resname, res_id, False, ligand_keys
+        ):
+            o3_name = o3prime_atom_name(res)
+            if o3_name is not None and atom_coordination_is_one(
+                res, cluster_tree, o3_name
+            ):
+                ho3 = build_o3prime_hydrogen(res)
+                if ho3 is not None:
+                    cap_residues.add(ho3)
+
         if not (
             (Polypeptide.is_aa(res) and res.get_id()[0] == " ") # normal amino acid
             or res.get_resname() == "IAS"                       # IAS
         ):
             continue
 
-        res_id = res.get_full_id()
         chain = model[res_id[2]]
         chain_list = orig_chains[chain.get_id()]
         ind = chain_list.index(res)
@@ -1164,6 +1315,11 @@ def compute_charge(
             if res_is_aa:
                 continue
             if not residue_in_ligands(resname, res_id, res_is_aa, ligand_charge.keys()):
+                resname_key = resname.strip()
+                # Polymer nucleotides belong in the sphere charge loop below,
+                # not the ligand CSV map (Protoss already covers true ligands).
+                if resname_key in RNA_POLYMER_RESNAMES or resname_key in MGT_RESNAMES:
+                    continue
                 if res.has_id("N") and res_id in n_terminals and (resname != "PRO" or res.has_id("H")):
                     # sometimes PRO has no H atom on N-terminus (Protoss's fault)
                     c += 1
@@ -1183,6 +1339,13 @@ def compute_charge(
             resname = res.get_resname()
             res_is_aa = Polypeptide.is_aa(res)
             if not residue_in_ligands(resname, res_id, res_is_aa, ligand_charge.keys()):
+                resname_key = resname.strip()
+                if resname_key in RNA_POLYMER_RESNAMES or resname_key in MGT_RESNAMES:
+                    delta = polymer_nucleotide_charge(res, sphere_tree)
+                    if delta:
+                        charge_debug(f"polymer nucleotide {delta}", res)
+                    c += delta
+                    continue
                 # Keep main's `pos and all(H)` gate so residues also listed in
                 # `neg` (e.g. deprotonated HIS) can fall through to the neg branch.
                 if resname in pos and all(res.has_id(h) for h in pos[resname]):
@@ -1537,7 +1700,9 @@ def extract_clusters(
         if count:
             res_count[cluster_name] = count_residues(spheres)
         if capping:
-            cap_residues = cap_chains(model, residues, capping, RGP_atoms)
+            cap_residues = cap_chains(
+                model, residues, capping, RGP_atoms, ligand_charge=ligand_charge
+            )
             if capping == 2:
                 spheres[-1] |= cap_residues
         if charge:
