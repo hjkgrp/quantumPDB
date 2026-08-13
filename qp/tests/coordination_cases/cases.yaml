@@ -85,3 +85,8 @@ cases:
     center_residues: [ADN_IAS]
     max_atom_count: 300
     merge_distance_cutoff: 6.0
+  - case: covalent_crosslink
+    pdb: 5XXD
+    center_residues: [SAM_8NR]
+    max_atom_count: 300
+    merge_distance_cutoff: 6.0

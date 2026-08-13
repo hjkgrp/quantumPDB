@@ -370,6 +370,25 @@ def _assert_isopeptide(tmp_path, pdb):
         assert charge == expected, f"{cluster_id}: expected {expected}, got {charge}"
 
 
+def _assert_covalent_crosslink(tmp_path, pdb):
+    from qp.manager.create import get_charge
+
+    sphere, ligands = _parse_charge_csv(tmp_path / pdb / "charge.csv")
+    # CYS_A186–8NR RGP crosslink: CYS is not thiolate -1; sphere-1 net 0.
+    assert sphere["A501_A505"]["1"] == 0
+    assert ligands["8NR_A505"] == 0
+    assert ligands["SAM_A501"] == 1
+
+    atoms = _parse_pdb_atoms(_cluster_pdb(tmp_path, pdb, "A501_A505"))
+    assert "CYS_A186" in _residue_keys(atoms)
+    assert "8NR_A505" in _residue_keys(atoms)
+    assert "HG" not in _atom_names(atoms, "CYS", "A", 186)
+
+    cluster_dir = tmp_path / pdb / "A501_A505"
+    charge, _ = get_charge(str(cluster_dir))
+    assert charge == 1
+
+
 ASSERTIONS = {
     "ASP_proton": _assert_asp_proton,
     "CSS_ligand": _assert_css_ligand,
@@ -391,4 +410,5 @@ ASSERTIONS = {
     "polymer_nucleotide": _assert_polymer_nucleotide,
     "COMT": _assert_comt,
     "isopeptide": _assert_isopeptide,
+    "covalent_crosslink": _assert_covalent_crosslink,
 }
