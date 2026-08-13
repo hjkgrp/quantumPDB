@@ -436,11 +436,13 @@ def test_force_remove_residues_two_neighbors(tmpdir):
 
     Uses SER_A110 (flanked by CYS_A109/LEU_A111), not the originally
     planned CSD_A112 (flanked by LEU_A111/ALA_A113): CSD is a
-    HETATM-flagged modified residue, which trips a pre-existing latent bug
-    in build_hydrogen's no-template capping fallback -- see
-    plans/open_questions_issues.md (A3). SER/CYS/LEU are plain ATOM
-    records with real H atoms, so this exercises the same two-neighbor
-    capping path without hitting that unrelated bug.
+    HETATM-flagged modified residue, and pairing it with ALA_A113 (which
+    has no H atom) trips a pre-existing latent bug in build_hydrogen's
+    no-template capping fallback (assumes an H atom always exists).
+    SER/CYS/LEU are plain ATOM records with real H atoms, so this
+    exercises the same two-neighbor capping path without hitting that
+    unrelated bug. See test_force_remove_residues_two_neighbors_noncanonical
+    below for a HETATM-neighbor case that doesn't trip it.
     """
     from qp.cluster.spheres import CenterResidue
 
@@ -480,6 +482,95 @@ def test_force_remove_residues_two_neighbors(tmpdir):
     )
     assert len(removed_leu) > len(baseline_leu), (
         "LEU_A111 was not capped after its neighbor SER_A110 was force-removed"
+    )
+
+
+def test_force_remove_residues_one_neighbor_noncanonical(tmpdir):
+    """Force-removing a non-canonical (HETATM-flagged) residue with exactly
+    one in-cluster neighbor should cap only that surviving neighbor.
+
+    Uses CSO_A114 with sphere_count=1, which leaves THR_A115 (sphere 2)
+    outside the cluster and ALA_A113 (sphere 1) as its only in-cluster
+    neighbor. ALA_A113 needs a C-side cap here (CSO sits on its C side),
+    which doesn't depend on an existing H atom, unlike the N-side fallback
+    -- so this doesn't trip the build_hydrogen bug described above.
+    """
+    path = os.path.join(os.path.dirname(__file__), "samples", "3a8g")
+    pdb_path = os.path.join(path, "Protoss", "3a8g_protoss.pdb")
+
+    def cluster_pdb(out):
+        return os.path.join(out, "A301", "A301.pdb")
+
+    baseline = tmpdir.mkdir("baseline")
+    spheres.extract_clusters(
+        pdb_path, str(baseline), FE_CENTER,
+        smooth_method="dummy_atom", mean_distance=3, sphere_count=1
+    )
+    baseline_ala = residue_atom_lines(cluster_pdb(str(baseline)), "ALA", "A", 113)
+    assert baseline_ala, "test setup assumption broken: ALA_A113 should already be in the cluster"
+    assert not residue_atom_lines(cluster_pdb(str(baseline)), "THR", "A", 115), (
+        "test setup assumption broken: THR_A115 should be outside a single-sphere cluster"
+    )
+
+    removed = tmpdir.mkdir("removed")
+    spheres.extract_clusters(
+        pdb_path, str(removed), FE_CENTER,
+        smooth_method="dummy_atom", mean_distance=3, sphere_count=1,
+        force_remove_residues=["CSO_A114"]
+    )
+    assert not residue_atom_lines(cluster_pdb(str(removed)), "CSO", "A", 114), (
+        "CSO_A114 was not force-removed from the cluster"
+    )
+    removed_ala = residue_atom_lines(cluster_pdb(str(removed)), "ALA", "A", 113)
+    assert len(removed_ala) > len(baseline_ala), (
+        "ALA_A113 was not capped after its neighbor CSO_A114 was force-removed"
+    )
+
+
+def test_force_remove_residues_two_neighbors_noncanonical(tmpdir):
+    """Force-removing a non-canonical (HETATM-flagged) residue flanked by
+    two in-cluster neighbors should cap both survivors.
+
+    Uses CSO_A114 (flanked by ALA_A113/THR_A115). Both survivors need
+    fallback (no-template) caps here too, same shape as
+    test_force_remove_residues_two_neighbors, but ALA_A113's is a C-side
+    cap (no H atom needed) and THR_A115's is an N-side cap where THR_A115
+    *does* have an H atom -- so, unlike removing CSD_A112 next to
+    ALA_A113's N side, this doesn't trip the build_hydrogen bug either.
+    """
+    path = os.path.join(os.path.dirname(__file__), "samples", "3a8g")
+    pdb_path = os.path.join(path, "Protoss", "3a8g_protoss.pdb")
+
+    def cluster_pdb(out):
+        return os.path.join(out, "A301", "A301.pdb")
+
+    baseline = tmpdir.mkdir("baseline")
+    spheres.extract_clusters(
+        pdb_path, str(baseline), FE_CENTER,
+        smooth_method="dummy_atom", mean_distance=3
+    )
+    baseline_ala = residue_atom_lines(cluster_pdb(str(baseline)), "ALA", "A", 113)
+    baseline_thr = residue_atom_lines(cluster_pdb(str(baseline)), "THR", "A", 115)
+    assert baseline_ala and baseline_thr, (
+        "test setup assumption broken: ALA_A113 and THR_A115 should already be in the default cluster"
+    )
+
+    removed = tmpdir.mkdir("removed")
+    spheres.extract_clusters(
+        pdb_path, str(removed), FE_CENTER,
+        smooth_method="dummy_atom", mean_distance=3,
+        force_remove_residues=["CSO_A114"]
+    )
+    assert not residue_atom_lines(cluster_pdb(str(removed)), "CSO", "A", 114), (
+        "CSO_A114 was not force-removed from the cluster"
+    )
+    removed_ala = residue_atom_lines(cluster_pdb(str(removed)), "ALA", "A", 113)
+    removed_thr = residue_atom_lines(cluster_pdb(str(removed)), "THR", "A", 115)
+    assert len(removed_ala) > len(baseline_ala), (
+        "ALA_A113 was not capped after its neighbor CSO_A114 was force-removed"
+    )
+    assert len(removed_thr) > len(baseline_thr), (
+        "THR_A115 was not capped after its neighbor CSO_A114 was force-removed"
     )
 
 

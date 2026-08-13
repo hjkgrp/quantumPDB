@@ -4,6 +4,12 @@
 # Initialization parameters
 input: example/basics/proteins.csv     # Path to protein CSV, single PDB, local path, or list [PDB1, PDB2]
 output_dir: dataset                    # Path to save the generated clusters
+modeller: true                         # Model missing loops
+protoss: true                          # Assign protonation states
+coordination: true                     # Generate clusters
+find_backbone_atoms: true              # Search each cluster for backbone (C, CA, N, O) atoms
+skip: all                              # Skip 'modeller', 'protoss', or 'all' jobs if they already exist
+optimize_select_residues: 1            # Modeller to model no (0), missing (1), or all (2) residues
 convert_to_nhie_oxo: false             # Convert A-KG NHIEs to succinate-oxo NHIEs (special workflow)
 max_clash_refinement_iter: 5           # Max Modeller--Protoss clash iterations (inactive under Protoss API v2)
 
@@ -20,7 +26,7 @@ capping_method: 1                      # Cap residues with None (0), hydrogens (
 smoothing_method: 2                    # 0 = box plot, 1 = DBSCAN, 2 = dummy atom, 3 = none
 merge_distance_cutoff: 0.0             # Merge nearby centers within this distance (Angstrom)
 cluster_name_template: null            # Optional name template, e.g. "A_{radius}"; null uses metal_id
-write_hetero_pdb: false                # Include HETATM records in combined cluster PDBs
+write_hetero_pdb: true                 # Include HETATM records in combined cluster PDBs
 
 # Output parameters
 compute_charges: true                  # Calculate charges using Protoss output
