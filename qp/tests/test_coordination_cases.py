@@ -389,6 +389,23 @@ def _assert_covalent_crosslink(tmp_path, pdb):
     assert charge == 1
 
 
+def _assert_segmented_ligand(tmp_path, pdb):
+    from qp.manager.create import get_charge
+
+    sphere, ligands = _parse_charge_csv(tmp_path / pdb / "charge.csv")
+    assert sphere["A300_A400"]["1"] == -1
+    # Protoss reports SAM+MEQ as one oligomer ligand.
+    assert ligands["SAM_A300 MEQ_A400"] == 2
+
+    atoms = _parse_pdb_atoms(_cluster_pdb(tmp_path, pdb, "A300_A400"))
+    keys = _residue_keys(atoms)
+    assert "SAM_A300" in keys
+    assert "MEQ_A400" in keys
+
+    charge, _ = get_charge(str(tmp_path / pdb / "A300_A400"))
+    assert charge == 1
+
+
 ASSERTIONS = {
     "ASP_proton": _assert_asp_proton,
     "CSS_ligand": _assert_css_ligand,
@@ -411,4 +428,5 @@ ASSERTIONS = {
     "COMT": _assert_comt,
     "isopeptide": _assert_isopeptide,
     "covalent_crosslink": _assert_covalent_crosslink,
+    "segmented_ligand": _assert_segmented_ligand,
 }

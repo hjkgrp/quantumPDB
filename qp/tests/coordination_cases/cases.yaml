@@ -90,3 +90,8 @@ cases:
     center_residues: [SAM_8NR]
     max_atom_count: 300
     merge_distance_cutoff: 6.0
+  - case: segmented_ligand
+    pdb: 1NV8
+    center_residues: [SAM_MEQ]
+    max_atom_count: 300
+    merge_distance_cutoff: 6.0
