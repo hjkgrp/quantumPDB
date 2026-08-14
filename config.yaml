@@ -7,11 +7,11 @@ output_dir: dataset                    # Path to save the generated clusters
 modeller: true                         # Model missing loops
 protoss: true                          # Assign protonation states
 coordination: true                     # Generate clusters
-find_backbone_atoms: true              # Search each cluster for backbone (C, CA, N, O) atoms
 skip: all                              # Skip 'modeller', 'protoss', or 'all' jobs if they already exist
 optimize_select_residues: 1            # Modeller to model no (0), missing (1), or all (2) residues
 convert_to_nhie_oxo: false             # Convert A-KG NHIEs to succinate-oxo NHIEs (special workflow)
 max_clash_refinement_iter: 5           # Max Modeller--Protoss clash iterations (inactive under Protoss API v2)
+find_backbone_atoms: true              # Write *_backbone.txt atom indices for each cluster
 
 # Cluster model parameters
 max_atom_count: null
@@ -21,7 +21,7 @@ force_include_residues: []             # Specific protein residues to force-incl
 force_remove_residues: []              # Specific protein residues to force-exclude, e.g. [HIS_A123]; RESNAME_CHAINID format, see docs
 number_of_spheres: 2                   # Coordination spheres to generate
 radius_of_first_sphere: 4.0            # Distance cutoff for the first sphere
-include_ligands: 2                     # 0 = first sphere only, 1 = non-water ligands, 2 = all ligands/waters
+include_ligands: 2                     # 0 = first sphere only, 1 = non-water ligands, 2 = all ligands/waters, 3 = center + standard AA + waters
 capping_method: 1                      # Cap residues with None (0), hydrogens (1), ACE/NME (2)
 smoothing_method: 2                    # 0 = box plot, 1 = DBSCAN, 2 = dummy atom, 3 = none
 merge_distance_cutoff: 0.0             # Merge nearby centers within this distance (Angstrom)

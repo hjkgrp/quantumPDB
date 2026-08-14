@@ -9,6 +9,92 @@
 
 """
 
+from collections import defaultdict
+from typing import Any, Dict, List, Tuple
+
+import numpy as np
+
+
+def read_ligands(path_ligand: str) -> List[List[str]]:
+    """Split a Protoss ligand SDF into non-empty per-ligand line blocks."""
+    with open(path_ligand, "r") as f:
+        sdf = f.read()
+    return [
+        [t for t in s.splitlines() if t != ""]
+        for s in sdf.split("$$$$")
+        if s != "\n" and s != ""
+    ]
+
+
+def parse_ligand_name(ligand_block: List[str]) -> Tuple[List[Tuple[str, str, str]], str]:
+    """Parse a ligand SDF title into residue tuples and a space-joined key."""
+    title = ligand_block[0].split("_")
+    name_id = [
+        (res_name, chain_id, res_id)
+        for res_name, chain_id, res_id
+        in zip(title[::3], title[1::3], title[2::3])
+    ]
+    name = " ".join([f"{res_name}_{chain_id}{res_id}" for res_name, chain_id, res_id in name_id])
+    return name_id, name
+
+
+def get_coord(line_segments: List[str]) -> np.ndarray:
+    """Return XYZ coordinates from the first three tokens of an SDF atom line."""
+    return np.array([float(x) for x in line_segments[:3]])
+
+
+def collect_RGP_atoms(path_ligand: str) -> Dict[str, Dict[int, Dict[str, Any]]]:
+    """Collect R# (RGP) atoms and their linking-atom coordinates from an SDF.
+
+    Protoss marks virtual attachment points with ``R#`` atoms and an
+    ``M  RGP`` record. This helper records each RGP atom index, its
+    coordinate, and the coordinate of the covalently linked real atom so
+    cluster capping can replace missing RGP sites with hydrogens.
+
+    Parameters
+    ----------
+    path_ligand : str
+        Path to the Protoss-generated ligand SDF file.
+
+    Returns
+    -------
+    dict
+        Nested mapping ``ligand_key -> atom_index -> {"coord", "linking_atom_coord"}``.
+    """
+    ligands = read_ligands(path_ligand)
+    RGP_atoms: Dict[str, Dict[int, Dict[str, Any]]] = defaultdict(dict)
+    for ligand_block in ligands:
+        if not ligand_block:
+            break
+        _, name = parse_ligand_name(ligand_block)
+        n_atom = 0
+        n_bond = 0
+        RGP_indices = set()
+        for i, line in enumerate(ligand_block):
+            line_segments = line.split()
+
+            if i == 3:
+                n_atom = int(line_segments[0])
+                n_bond = int(line_segments[1])
+            if len(line_segments) > 3 and line_segments[3] == "R#":
+                RGP_atoms[name][i - 3] = {
+                    "coord": get_coord(line_segments),
+                }
+                RGP_indices.add(i - 3)
+            if n_atom and i >= n_atom + 4 and i < n_atom + 4 + n_bond:
+                begin_atom_idx = int(line_segments[0])
+                end_atom_idx = int(line_segments[1])
+                if begin_atom_idx in RGP_indices:
+                    RGP_atoms[name][begin_atom_idx]["linking_atom_coord"] = get_coord(
+                        ligand_block[end_atom_idx + 3].split()
+                    )
+                elif end_atom_idx in RGP_indices:
+                    RGP_atoms[name][end_atom_idx]["linking_atom_coord"] = get_coord(
+                        ligand_block[begin_atom_idx + 3].split()
+                    )
+    return RGP_atoms
+
+
 def compute_charge(path_ligand, path_pdb):
     """Compute the formal charge of each ligand from Protoss SDF output.
 
@@ -31,29 +117,19 @@ def compute_charge(path_ligand, path_pdb):
         Mapping of ligand ID strings (e.g., ``'FE_A199'``) to formal charges.
         Oligomeric ligands use space-separated keys (e.g., ``'GAL_A1 GAL_A2'``).
     """
-    with open(path_ligand, "r") as f:
-        sdf = f.read()
     with open(path_pdb, "r") as f:
         pdb_lines = f.readlines()
-    ligands = [
-        [t for t in s.splitlines() if t != ""]
-        for s in sdf.split("$$$$")
-        if s != "\n" and s != ""
-    ]
+    ligands = read_ligands(path_ligand)
 
     charge = {}
-    for l in ligands:
-        title = l[0].split("_")
-        name_id = [
-            (res_name, chain_id, res_id) 
-            for res_name, chain_id, res_id 
-            in zip(title[::3], title[1::3], title[2::3])
-        ]
-        name = " ".join([f"{res_name}_{chain_id}{res_id}" for res_name, chain_id, res_id in name_id])
+    for ligand_block in ligands:
+        if not ligand_block:
+            break
+        name_id, name = parse_ligand_name(ligand_block)
 
         c = 0
         n_atom = 0
-        for line in l:
+        for line in ligand_block:
             if "V2000" in line:
                 n_atom = int(line[:3]) # https://discover.3ds.com/sites/default/files/2020-08/biovia_ctfileformats_2020.pdf
             if line.startswith("M  RGP"):
@@ -110,24 +186,13 @@ def compute_spin(path_ligand):
     dict
         Keyed by ligand ID string, values are extra spin integers.
     """
-    with open(path_ligand, "r") as f:
-        sdf = f.read()
-
-    ligands = [
-        [t for t in s.splitlines() if t != ""]
-        for s in sdf.split("$$$$")
-        if s != "\n" and s != ""
-    ]
+    ligands = read_ligands(path_ligand)
     spin = {}
-    for l in ligands:
-        title = l[0].split("_")
-        name_id = [
-            (res_name, chain_id, res_id) 
-            for res_name, chain_id, res_id 
-            in zip(title[::3], title[1::3], title[2::3])
-        ]
-        name = " ".join([f"{res_name}_{chain_id}{res_id}" for res_name, chain_id, res_id in name_id])
-        for res_name, chain_id, res_id in name_id:
+    for ligand_block in ligands:
+        if not ligand_block:
+            break
+        name_id, name = parse_ligand_name(ligand_block)
+        for res_name, _, _ in name_id:
             if res_name == "NO":
                 spin[name] = 1
             elif res_name == "OXY":

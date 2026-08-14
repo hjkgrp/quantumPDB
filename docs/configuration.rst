@@ -57,8 +57,8 @@ cluster extraction).
    * - ``convert_to_nhie_oxo``
      - ``false``
      - Enable the specialized AKG → succinate / oxo NHIE conversion after
-       Protoss. Requires ``modeller`` and ``protoss``. See
-       :doc:`special_workflows`.
+       Protoss. Requires ``modeller`` and ``protoss``. Legacy alias
+       ``convert_to_oxo`` is also accepted. See :doc:`special_workflows`.
 
 **Cluster model parameters:**
 
@@ -112,7 +112,10 @@ cluster extraction).
    * - ``include_ligands``
      - ``2``
      - Ligand inclusion level: ``0`` = first sphere only, ``1`` = non-water
-       ligands, ``2`` = all ligands and waters.
+       ligands, ``2`` = all ligands and waters, ``3`` = center residue(s),
+       standard amino acids, and waters only (exclude non-standard ligands
+       from outer spheres). Protoss RGP/R# attachment points are collected
+       automatically when charges are computed and used for hydrogen capping.
    * - ``max_atom_count``
      - ``None``
      - Maximum number of atoms in the QM cluster. When set, the most distant
