@@ -95,3 +95,13 @@ cases:
     center_residues: [SAM_MEQ]
     max_atom_count: 300
     merge_distance_cutoff: 6.0
+  - case: nsun2_9z2n
+    pdb: 9Z2N
+    # Cropped Step-3 neighborhood (A160–325 + SAH + RNA B45–51).
+    # Residue-union centers; spheres=0 → specified-residue cluster.
+    center_residues:
+      - SER_A189-ASP_A215-ARG_A220-ASP_A242-ALA_A243-CYS_A267-ASP_A268-VAL_A269-PRO_A270-ALA_A271-SER_A272-LYS_A279-SER_A319-THR_A320-CYS_A321-SER_A322-SAH_A801-U_B47-A1C_B48-G_B49
+    number_of_spheres: 0
+    max_atom_count: 500
+    merge_distance_cutoff: 5.0
+    cluster_name_template: step3_C271A

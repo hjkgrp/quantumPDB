@@ -406,6 +406,54 @@ def _assert_segmented_ligand(tmp_path, pdb):
     assert charge == 1
 
 
+def _assert_nsun2_9z2n(tmp_path, pdb):
+    """NSUN2 9Z2N Step-3: 5′/3′ nucleic caps, SAH skip, Cys–A1C thioether."""
+    cluster_id = "step3_C271A"
+    atoms = _parse_pdb_atoms(_cluster_pdb(tmp_path, pdb, cluster_id))
+    keys = _residue_keys(atoms)
+    for key in ("U_B47", "A1C_B48", "G_B49", "CYS_A321", "SAH_A801"):
+        assert key in keys, f"missing {key} in cluster"
+
+    # 5′ P–H on cut U; 3′ HO3′ on terminal G; SAH keeps Protoss H3′ only.
+    assert "HP" in _atom_names(atoms, "U", "B", 47)
+    assert _has_h_near(atoms, "G", "B", 49, "O3'", cutoff=1.2)
+    assert "HO3'" in _atom_names(atoms, "G", "B", 49) or "HO3*" in _atom_names(
+        atoms, "G", "B", 49
+    )
+    assert "HO3'" not in _atom_names(atoms, "SAH", "A", 801)
+    assert "HO3*" not in _atom_names(atoms, "SAH", "A", 801)
+
+    # Cys321–A1C thioether geometry; no thiolate HG.
+    assert "HG" not in _atom_names(atoms, "CYS", "A", 321)
+    sg = _atom_coords(atoms, "CYS", "A", 321, "SG")
+    c6 = _atom_coords(atoms, "A1C", "B", 48, "C6")
+    assert sg is not None and c6 is not None
+    assert abs(_dist(sg, c6) - 1.84) < 0.15
+
+    sphere, ligands = _parse_charge_csv(tmp_path / pdb / "charge.csv")
+    # Ligand SDF is SAH only (charge 0); polymer U/A1C/G phosphates are sphere.
+    assert ligands.get("SAH_A801", 0) == 0
+    # Sphere-0 (specified-residue mode) stores polymer + AA formal charge.
+    # Three polymer phosphates (−3) and Cys thioether (0, not −1); other AAs
+    # may add further charge — assert CYS is not thiolate by checking that
+    # the sphere charge is consistent with polymer phosphates and no extra
+    # Cys −1 beyond what the residue union already encodes.
+    assert cluster_id in sphere
+    sphere0 = sphere[cluster_id].get("0", sphere[cluster_id].get("1"))
+    assert sphere0 is not None
+    # Expect at least the three polymer phosphates (−3). If CYS were wrongly
+    # thiolate −1, charge would be one unit more negative than the AA+phosphate
+    # baseline already reflected in deliverables (−3 for C271A without Glu162).
+    assert sphere0 <= -3
+    # Free Cys would push another −1; thioether must keep us above that pitfall
+    # relative to a naive −4 from (3×phosphate + Cys). With Asp/etc. the total
+    # is typically −3 for this union; forbid Cys double-counting via readme
+    # geometry checks above and require sphere charge != polymer−3 + Cys−1
+    # when other ionizable sites net to a known window.
+    # Practical bound from Phase-0 C271A residue-union (no Glu162): −3.
+    assert sphere0 == -3
+
+
 ASSERTIONS = {
     "ASP_proton": _assert_asp_proton,
     "CSS_ligand": _assert_css_ligand,
@@ -429,4 +477,5 @@ ASSERTIONS = {
     "isopeptide": _assert_isopeptide,
     "covalent_crosslink": _assert_covalent_crosslink,
     "segmented_ligand": _assert_segmented_ligand,
+    "nsun2_9z2n": _assert_nsun2_9z2n,
 }
