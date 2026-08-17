@@ -28,8 +28,12 @@ def test_parse_input(tmpdir):
     center_yaml_residues = ["FE", "FE2"]
 
     expected_pdbs = [(p, os.path.join(tmpdir, p, f"{p}.pdb"), None) for p in pdbs]
-    # Local .pdb path keeps the absolute input path rather than the download target
-    expected_pdbs[-1] = ("4ilv", pdb_path, None)
+    # Local .pdb is normalized into the output dir; source records the preserved original
+    expected_pdbs[-1] = (
+        "4ilv",
+        os.path.join(tmpdir, "4ilv", "4ilv.pdb"),
+        {"type": "amber", "path": os.path.join(tmpdir, "4ilv", "4ilv_original.pdb")},
+    )
     output_pdbs, output_centers, _, _ = setup.parse_input(
         input_pdbs, tmpdir, center_yaml_residues
     )

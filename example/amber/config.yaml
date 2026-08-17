@@ -1,0 +1,42 @@
+# QuantumPDB cluster extraction for a user-supplied AMBER (ff14SB) PDB.
+#
+# Run from the repository root:
+#     qp run -c example/amber/config.yaml
+#
+# AMBER protonation-state residue names (HIE/HIP/HID, CYX, ASH/GLH, LYN, ...)
+# are auto-normalized to canonical PDB names when a local .pdb is given, so
+# BioPython recognizes the residues. The untouched original is preserved at
+# output/small_amber/small_amber_original.pdb. Because the structure is already
+# protonated by AMBER, Modeller and Protoss are turned off; capping, charge
+# counting, and residue counting still run.
+
+# --- Input / output -------------------------------------------------------
+input: example/amber/pdb/small_amber.pdb
+output_dir: example/amber/output
+
+# Center on the catalytic Zn. AMBER writes the metal as an ATOM record (blank
+# hetflag), which the *fuzzy* matcher rejects. Use a *strict* center key of the
+# form RESNAME_CHAINRESID; the dash makes it strict, and repeating the same key
+# selects a single center.
+center_residues:
+  - ZNH_A260-ZNH_A260
+
+# --- Structure prep (skipped for AMBER input) -----------------------------
+modeller: false
+protoss: false
+skip: all
+
+# --- Cluster extraction ---------------------------------------------------
+coordination: true
+number_of_spheres: 2
+radius_of_first_sphere: 4.0
+max_atom_count: 750
+merge_distance_cutoff: 0.0
+include_ligands: 2
+additional_ligands: []
+capping_method: 1          # 1 = cap with hydrogens
+smoothing_method: 2        # 2 = dummy_atom
+compute_charges: true      # writes charge.csv and runs charge_count
+count_residues: true       # writes count.csv
+write_xyz: true            # writes per-sphere .xyz
+write_hetero_pdb: false

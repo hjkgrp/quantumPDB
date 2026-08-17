@@ -66,7 +66,8 @@ def test_get_charges_default_uses_ff14sb():
          mock.patch('qp.manager.charge_embedding.remove_qm_atoms'), \
          mock.patch('qp.manager.charge_embedding.read_xyz', return_value=__import__('numpy').array([[0, 0, 0]])), \
          mock.patch('qp.manager.charge_embedding.parse_pdb_to_xyz'), \
-         mock.patch('os.path.exists', return_value=False), \
+         mock.patch('os.path.exists',
+           side_effect=lambda p: p == '/fake/output/pdb1/Protoss/pdb1_protoss.pdb'), \
          mock.patch('os.mkdir'), \
          mock.patch('os.getcwd', return_value='/fake/output/pdb1/A200/method'), \
          mock.patch('shutil.rmtree'):
@@ -85,9 +86,11 @@ def test_get_charges_custom_file_used():
     _real_exists = os.path.exists
 
     def _exists_side_effect(path):
-        """Allow the custom charges file to exist, mock others as absent."""
+        """Allow the custom charges file and the Protoss source PDB to exist."""
         if path == tmppath:
             return _real_exists(path)
+        if path == '/fake/output/pdb1/Protoss/pdb1_protoss.pdb':
+            return True
         return False
 
     try:

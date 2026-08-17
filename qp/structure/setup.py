@@ -6,6 +6,8 @@ import sys
 import yaml
 import requests
 
+import shutil
+from qp.structure.amber_dict import get_amber_to_pdbcanonical_name
 from qp.structure.mmcif_to_pdb import OversizedStructureError, convert_mmcif_to_pdb
 
 
@@ -59,12 +61,12 @@ def parse_input(input, output, center_yaml_residues, force_include_yaml_residues
     tuple of (list, list, list, list)
         ``(pdb_all, center_residues, force_include_residues,
         force_remove_residues)`` where ``pdb_all`` is a list of
-        ``(pdb_id, pdb_path, source_cif)`` tuples, ``center_residues`` is a
+        ``(pdb_id, pdb_path, source)`` tuples, ``center_residues`` is a
         list of center definition strings, and ``force_include_residues``/
         ``force_remove_residues`` are each a list (one entry per PDB) of
         lists of ``'RESNAME_CHAINID'`` residue keys to force-include/exclude
-        for that PDB. ``source_cif`` is a local mmCIF path when the user
-        supplied ``.cif``/``.mmcif``, otherwise ``None``.
+        for that PDB. see :func:`get_pdbs` for the
+        ``source`` schema.
 
     Raises
     ------
@@ -211,6 +213,50 @@ def ensure_structure_pdb(pdb_id, pdb_path, source_cif=None):
 
     return fetch_pdb(pdb_id, pdb_path)
 
+def convert_amber_to_pdb(input_pdb, output_pdb):
+    """Rewrite AMBER ff14SB residue names to canonical PDB residue names.
+
+    Parameters
+    ----------
+    input_pdb: str
+        Path to the input PDB file
+    output_pdb: str
+        Path to the output PDB file
+
+    Returns
+    -------
+    changed: set
+        Set of tuples (resname, chain, resid) that were changed
+    """
+    amber_to_pdbcanonical = get_amber_to_pdbcanonical_name()
+    changed = set()
+    with open(input_pdb, "r") as infile, open(output_pdb, "w") as outfile:
+        for line in infile:
+            if line.startswith(("ATOM", "HETATM")):
+                resname = line[17:20].strip()
+                chain = line[21:22].strip()
+                resid = line[22:26].strip()
+                if resname in amber_to_pdbcanonical:
+                    line = line[:17] + amber_to_pdbcanonical[resname] + line[20:]
+                    changed.add((resname,chain,resid))
+            outfile.write(line)
+    return changed
+
+def prepare_local_pdb(pdb, user_pdb_path, output_path):
+    
+    struct_dir = os.path.join(output_path, pdb)
+    os.makedirs(struct_dir, exist_ok=True)
+
+    original = os.path.join(struct_dir, f"{pdb}_original.pdb")
+    target = os.path.join(struct_dir, f"{pdb}.pdb")
+    
+    shutil.copy(user_pdb_path, original)
+    changed = convert_amber_to_pdb(original, target)
+    if changed:
+        summary = ", ".join(f"{resname} {chain}{resid}" for resname, chain, resid in sorted(changed))
+        print(f"> Renamed AMBER residues in {pdb}: {summary}")
+    
+    return target, original
 
 def get_pdbs(input_path, output_path):
     """
@@ -226,9 +272,17 @@ def get_pdbs(input_path, output_path):
     Returns
     -------
     pdb_all
-        List of ``(pdb_id, pdb_path, source_cif)`` tuples. ``source_cif`` is
-        set for local ``.cif``/``.mmcif`` inputs; otherwise ``None``.
-
+        list of tuple
+    One ``(pdb_id, pdb_path, source)`` tuple per structure. ``pdb_path`` is
+    the working PDB the rest of the pipeline consumes. ``source`` records
+    is one of:
+    * ``None`` — fetched by PDB code, or entry from a CSV/txt batch.
+    * ``{"type": "cif", "path": <abs mmCIF path>}`` — local mmCIF that is
+      converted to ``pdb_path`` during the run.
+    * ``{"type": "amber", "path": <abs original PDB path>}`` — local PDB
+      whose AMBER residue names were normalized into ``pdb_path``; the
+      untouched original is preserved at ``path`` for point-charge
+      embedding.
 
     Notes
     -----
@@ -244,10 +298,11 @@ def get_pdbs(input_path, output_path):
             pdb = pdb.replace(".", "_")
             ext_lower = ext.lower()
             if ext_lower == ".pdb":
-                pdb_all.append((pdb, pdb_id, None))
+                target, original = prepare_local_pdb(pdb, pdb_id, output_path)
+                pdb_all.append((pdb, target, {"type": "amber", "path": original}))
             elif ext_lower in (".cif", ".mmcif"):
                 target = os.path.join(output_path, pdb, f"{pdb}.pdb")
-                pdb_all.append((pdb, target, os.path.abspath(pdb_id)))
+                pdb_all.append((pdb, target, {"type": "cif", "path": os.path.abspath(pdb_id)}))
             elif ext_lower == ".csv":
                 with open(pdb_id, "r") as csvfile:
                     reader = csv.DictReader(csvfile)

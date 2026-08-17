@@ -1,0 +1,41 @@
+# Generate TeraChem input files (with MM point-charge embedding) for the
+# clusters extracted by config.yaml / extract_clusters.py.
+#
+# Run AFTER cluster extraction, from the repository root:
+#     qp run    -c example/amber/config.yaml     # 1) extract clusters
+#     qp submit -c example/amber/submit.yaml      # 2) write TeraChem inputs
+#
+# For each cluster this writes:
+#   output/small_amber/A260/wpbeh/qmscript.in   TeraChem input
+#   output/small_amber/A260/wpbeh/ptchrges.xyz  MM point charges (ff14SB)
+#   output/small_amber/A260/wpbeh/jobscript.sh  scheduler script
+#
+# Point charges are read from the untouched AMBER original
+# (small_amber_original.pdb), whose ff14SB protonation-state names (HIP/HIE/
+# HID) match the built-in charge dictionary. Protoss is not required.
+
+# --- Input / output -------------------------------------------------------
+# CSV supplies the metal oxidation state and spin multiplicity per structure.
+# Total charge = (summed residue charges from charge.csv) + oxidation.
+input: example/amber/ox_info.csv
+output_dir: example/amber/output
+
+# --- What to do -----------------------------------------------------------
+create_jobs: true
+submit_jobs: false          # set true only on a cluster with the scheduler
+
+# --- QM settings ----------------------------------------------------------
+method: wpbeh
+basis: lacvps_ecp
+guess: generate
+optimization: false
+scheduler: slurm            # or: sge
+gpus: 1
+memory: 8G
+
+# --- Point-charge embedding ----------------------------------------------
+charge_embedding: true
+charge_embedding_cutoff: 20      # angstroms from QM centroid
+charge_embedding_charges: null   # null = built-in AMBER ff14SB charges; or path to custom JSON
+use_implicit_solvent: false      # embedding replaces implicit solvent here
+dielectric: 10

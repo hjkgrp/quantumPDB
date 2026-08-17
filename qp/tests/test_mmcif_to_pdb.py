@@ -65,10 +65,10 @@ def test_get_pdbs_accepts_cif(tmpdir):
     output = os.path.join(tmpdir, "out")
     pdb_all = setup.get_pdbs([cif_path], output)
     assert len(pdb_all) == 1
-    pdb_id, pdb_path, source_cif = pdb_all[0]
+    pdb_id, pdb_path, source = pdb_all[0]
     assert pdb_id == "demo"
     assert pdb_path == os.path.join(output, "demo", "demo.pdb")
-    assert source_cif == os.path.abspath(cif_path)
+    assert source == {"type": "cif", "path": os.path.abspath(cif_path)}
 
 
 def test_ensure_structure_pdb_converts_local_cif(tmpdir):
