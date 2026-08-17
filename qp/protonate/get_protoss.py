@@ -42,6 +42,18 @@ PROTOSS_URL = API_BASE + "protoss/"
 PROTOSS_JOBS_URL = API_BASE + "protoss/jobs/"
 
 
+def _retry_settings(default_retries=5, default_delay=60):
+    """Return (retries, delay) from env, falling back to defaults.
+
+    ``PROTOSS_UPLOAD_RETRIES`` / ``PROTOSS_UPLOAD_RETRY_DELAY`` let CI use a
+    short retry budget so flaky ProteinsPlus outages become fast skips instead
+    of multi-minute failures.
+    """
+    retries = int(os.environ.get("PROTOSS_UPLOAD_RETRIES", default_retries))
+    delay = int(os.environ.get("PROTOSS_UPLOAD_RETRY_DELAY", default_delay))
+    return max(1, retries), max(0, delay)
+
+
 
 def _poll_job(job_id, jobs_url, timeout=600, poll_interval=2):
     """Poll a ProteinsPlus v2 job until it leaves pending/running."""
@@ -91,10 +103,9 @@ def upload(path):
     ValueError
         If the upload is rejected or preprocessing fails.
     KeyError
-        If the upload fails after 5 retry attempts.
+        If the upload fails after all retry attempts.
     """
-    retries = 5
-    delay = 60  # seconds
+    retries, delay = _retry_settings()
 
     for attempt in range(retries):
         try:
@@ -143,10 +154,9 @@ def submit(pid):
     ValueError
         If the PDB code is invalid (server returns 400) or submission fails.
     KeyError
-        If the submission fails after 5 retry attempts.
+        If the submission fails after all retry attempts.
     """
-    retries = 5
-    delay = 60  # seconds
+    retries, delay = _retry_settings()
 
     for attempt in range(retries):
         try:

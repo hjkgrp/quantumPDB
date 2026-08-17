@@ -5,6 +5,36 @@ import glob
 import filecmp
 
 from qp.cluster import spheres
+from qp.cluster.spheres import CenterResidue
+
+
+FE_CENTER = CenterResidue("FE_FE2")
+SUGAR_CENTER = CenterResidue("BGC_GAL_NGA_SIA_NI")
+DNA_CENTER = CenterResidue("DT_B501-MA7_B502-DT_B503")
+
+
+@pytest.mark.parametrize(
+    "spec, mode, residues",
+    [
+        ("FE", "fuzzy", ["FE"]),
+        ("FE_FE2", "fuzzy", ["FE", "FE2"]),
+        ("FE_A199", "fuzzy", ["FE", "A199"]),
+        ("exact:FE_A199", "strict", ["FE_A199"]),
+        ("EXACT:FE_A199", "strict", ["FE_A199"]),
+        ("CU_A357-CU_A358", "strict", ["CU_A357", "CU_A358"]),
+        ("exact:FE_A155-HIS_A93", "strict", ["FE_A155", "HIS_A93"]),
+        ("DT_B501-MA7_B502-DT_B503", "strict", ["DT_B501", "MA7_B502", "DT_B503"]),
+    ],
+)
+def test_center_residue_parsing(spec, mode, residues):
+    center = CenterResidue(spec)
+    assert center.mode == mode
+    assert center.residue_list == residues
+
+
+def test_center_residue_exact_prefix_requires_key():
+    with pytest.raises(ValueError, match="exact:"):
+        CenterResidue("exact:")
 
 
 def check_clusters(path, out, metal_ids):
@@ -29,6 +59,21 @@ def check_clusters(path, out, metal_ids):
     assert filecmp.cmp(expected_count, output_count), "Residue count does not match expected"
 
 
+def residue_atom_lines(pdb_path, resname, chain, resnum):
+    """Return the ATOM/HETATM lines for one residue in a PDB file."""
+    lines = []
+    with open(pdb_path) as f:
+        for line in f:
+            if (
+                line.startswith(("ATOM", "HETATM"))
+                and line[17:20].strip() == resname
+                and line[21].strip() == chain
+                and int(line[22:26]) == resnum
+            ):
+                lines.append(line)
+    return lines
+
+
 @pytest.mark.parametrize("sample_cluster", [
     ("1sp9", ("A446", "B446")),
     ("2q4a", ("A901", "B902")),
@@ -38,8 +83,8 @@ def test_extract_clusters(tmpdir, sample_cluster):
     pdb, metal_ids, path = sample_cluster
     pdb_path = os.path.join(path, "Protoss", f"{pdb}_protoss.pdb")
     spheres.extract_clusters(
-        pdb_path, tmpdir, ["FE", "FE2"],
-        smooth_method="dummy_atom", mean_distance=3
+        pdb_path, tmpdir, FE_CENTER,
+        smooth_method="dummy_atom", mean_distance=3, capping=0
     )
     check_clusters(path, tmpdir, metal_ids)
 
@@ -49,7 +94,7 @@ def test_cap_heavy(tmpdir, sample_cluster):
     pdb, metal_ids, path = sample_cluster
     pdb_path = os.path.join(path, "Protoss", f"{pdb}_protoss.pdb")
     spheres.extract_clusters(
-        pdb_path, tmpdir, ["FE", "FE2"], capping=2, 
+        pdb_path, tmpdir, FE_CENTER, capping=2,
         smooth_method="dummy_atom", mean_distance=3
     )
     check_clusters(path, tmpdir, metal_ids)
@@ -60,8 +105,8 @@ def test_box_plot(tmpdir, sample_cluster):
     pdb, metal_ids, path = sample_cluster
     pdb_path = os.path.join(path, "Protoss", f"{pdb}_protoss.pdb")
     spheres.extract_clusters(
-        pdb_path, tmpdir, ["FE", "FE2"],
-        smooth_method="box_plot"
+        pdb_path, tmpdir, FE_CENTER,
+        smooth_method="box_plot", capping=0
     )
     check_clusters(path, tmpdir, metal_ids)
 
@@ -71,8 +116,8 @@ def test_dbscan(tmpdir, sample_cluster):
     pdb, metal_ids, path = sample_cluster
     pdb_path = os.path.join(path, "Protoss", f"{pdb}_protoss.pdb")
     spheres.extract_clusters(
-        pdb_path, tmpdir, ["FE", "FE2"], 
-        smooth_method="dbscan", eps=6, min_samples=3
+        pdb_path, tmpdir, FE_CENTER,
+        smooth_method="dbscan", eps=6, min_samples=3, capping=0
     )
     check_clusters(path, tmpdir, metal_ids)
 
@@ -91,9 +136,9 @@ def test_merge_centers(tmpdir, sample_cluster):
     pdb, metal_ids, path = sample_cluster
     pdb_path = os.path.join(path, "Protoss", f"{pdb}_protoss.pdb")
     spheres.extract_clusters(
-        pdb_path, tmpdir, ["BGC", "GAL", "NGA", "SIA", "NI"],
+        pdb_path, tmpdir, SUGAR_CENTER,
         merge_cutoff=4.0,
-        smooth_method="dummy_atom", mean_distance=3
+        smooth_method="dummy_atom", mean_distance=3, capping=0
     )
     check_clusters(path, tmpdir, metal_ids)
 
@@ -103,11 +148,430 @@ def test_prune_atoms(tmpdir, sample_cluster):
     pdb, metal_ids, path = sample_cluster
     pdb_path = os.path.join(path, "Protoss", f"{pdb}_protoss.pdb")
     spheres.extract_clusters(
-        pdb_path, tmpdir, ["DT", "MA7"],
+        pdb_path, tmpdir, DNA_CENTER,
         max_atom_count=102, merge_cutoff=2.0,
-        smooth_method="dummy_atom", mean_distance=3
+        smooth_method="dummy_atom", mean_distance=3, capping=0
     )
     check_clusters(path, tmpdir, metal_ids)
+
+
+def test_force_include_residues(tmpdir):
+    """force_include_residues should force-include a residue outside the
+    default spheres, cap it like any other extracted residue, and protect
+    it from max_atom_count pruning.
+
+    Note: unlike the other tests in this file, this constructs a real
+    CenterResidue (the current extract_clusters API) rather than passing a
+    plain resname list.
+    """
+    from qp.cluster.spheres import CenterResidue
+
+    path = os.path.join(os.path.dirname(__file__), "samples", "3a8g")
+    pdb_path = os.path.join(path, "Protoss", "3a8g_protoss.pdb")
+    center_residue = CenterResidue("FE")
+
+    def cluster_pdb(out):
+        return os.path.join(out, "A301", "A301.pdb")
+
+    # GLU_A9 is not reached by sphere growth (confirmed against the golden
+    # 3a8g/A301 spheres, which only cover residues near the active site)
+    baseline = tmpdir.mkdir("baseline")
+    spheres.extract_clusters(
+        pdb_path, str(baseline), center_residue,
+        smooth_method="dummy_atom", mean_distance=3
+    )
+    assert not residue_atom_lines(cluster_pdb(str(baseline)), "GLU", "A", 9)
+
+    # force_include_residues should force it in and cap it
+    added = tmpdir.mkdir("added")
+    spheres.extract_clusters(
+        pdb_path, str(added), center_residue,
+        smooth_method="dummy_atom", mean_distance=3,
+        force_include_residues=["GLU_A9"]
+    )
+    added_lines = residue_atom_lines(cluster_pdb(str(added)), "GLU", "A", 9)
+    source_lines = residue_atom_lines(pdb_path, "GLU", "A", 9)
+    assert added_lines, "GLU_A9 was not added to the cluster"
+    assert len(added_lines) > len(source_lines), "GLU_A9 was not capped"
+
+    # Protected from max_atom_count pruning, even though it's one of the
+    # most distant residues from the active site and would normally be
+    # pruned first
+    pruned = tmpdir.mkdir("pruned")
+    spheres.extract_clusters(
+        pdb_path, str(pruned), center_residue,
+        smooth_method="dummy_atom", mean_distance=3,
+        force_include_residues=["GLU_A9"], max_atom_count=60
+    )
+    assert residue_atom_lines(cluster_pdb(str(pruned)), "GLU", "A", 9), (
+        "GLU_A9 was pruned despite being explicitly requested"
+    )
+
+
+def test_force_include_residues_multiple(tmpdir):
+    """force_include_residues should support force-including more than one
+    residue at once, spanning different chains."""
+    from qp.cluster.spheres import CenterResidue
+
+    path = os.path.join(os.path.dirname(__file__), "samples", "3a8g")
+    pdb_path = os.path.join(path, "Protoss", "3a8g_protoss.pdb")
+    center_residue = CenterResidue("FE")
+
+    def cluster_pdb(out):
+        return os.path.join(out, "A301", "A301.pdb")
+
+    # Both are absent from the default spheres (same reasoning as
+    # test_force_include_residues), one on each chain
+    residues_to_add = [("GLU", "A", 9), ("GLY", "B", 3)]
+
+    added = tmpdir.mkdir("added")
+    spheres.extract_clusters(
+        pdb_path, str(added), center_residue,
+        smooth_method="dummy_atom", mean_distance=3,
+        force_include_residues=[f"{resname}_{chain}{resnum}" for resname, chain, resnum in residues_to_add]
+    )
+
+    for resname, chain, resnum in residues_to_add:
+        added_lines = residue_atom_lines(cluster_pdb(str(added)), resname, chain, resnum)
+        source_lines = residue_atom_lines(pdb_path, resname, chain, resnum)
+        assert added_lines, f"{resname}_{chain}{resnum} was not added to the cluster"
+        assert len(added_lines) > len(source_lines), f"{resname}_{chain}{resnum} was not capped"
+
+
+def test_force_include_residues_already_present(tmpdir):
+    """force_include_residues should not write a residue twice when it's
+    already part of the cluster via normal sphere growth."""
+    from qp.cluster.spheres import CenterResidue
+
+    path = os.path.join(os.path.dirname(__file__), "samples", "3a8g")
+    pdb_path = os.path.join(path, "Protoss", "3a8g_protoss.pdb")
+    center_residue = CenterResidue("FE")
+
+    def cluster_pdb(out):
+        return os.path.join(out, "A301", "A301.pdb")
+
+    # ALA_A113 is already part of the default sphere 1 (confirmed against
+    # the golden 3a8g/A301/1.pdb), flanked on both sides by residues that
+    # are also already in the cluster, so it isn't even capped -- any
+    # atom-count change here can only come from duplicate writing
+    baseline = tmpdir.mkdir("baseline")
+    spheres.extract_clusters(
+        pdb_path, str(baseline), center_residue,
+        smooth_method="dummy_atom", mean_distance=3
+    )
+    baseline_lines = residue_atom_lines(cluster_pdb(str(baseline)), "ALA", "A", 113)
+    assert baseline_lines, "test setup assumption broken: ALA_A113 should already be in the default cluster"
+
+    forced = tmpdir.mkdir("forced")
+    spheres.extract_clusters(
+        pdb_path, str(forced), center_residue,
+        smooth_method="dummy_atom", mean_distance=3,
+        force_include_residues=["ALA_A113"]
+    )
+    forced_lines = residue_atom_lines(cluster_pdb(str(forced)), "ALA", "A", 113)
+
+    assert len(forced_lines) == len(baseline_lines), (
+        "ALA_A113 was written a different number of times when force-included "
+        "despite already being part of the cluster (expected no duplication)"
+    )
+
+
+def test_force_remove_residues(tmpdir):
+    """force_remove_residues should exclude a residue that would otherwise
+    be part of the cluster via normal sphere growth."""
+    from qp.cluster.spheres import CenterResidue
+
+    path = os.path.join(os.path.dirname(__file__), "samples", "3a8g")
+    pdb_path = os.path.join(path, "Protoss", "3a8g_protoss.pdb")
+    center_residue = CenterResidue("FE")
+
+    def cluster_pdb(out):
+        return os.path.join(out, "A301", "A301.pdb")
+
+    baseline = tmpdir.mkdir("baseline")
+    spheres.extract_clusters(
+        pdb_path, str(baseline), center_residue,
+        smooth_method="dummy_atom", mean_distance=3
+    )
+    assert residue_atom_lines(cluster_pdb(str(baseline)), "ALA", "A", 113), (
+        "test setup assumption broken: ALA_A113 should already be in the default cluster"
+    )
+
+    removed = tmpdir.mkdir("removed")
+    spheres.extract_clusters(
+        pdb_path, str(removed), center_residue,
+        smooth_method="dummy_atom", mean_distance=3,
+        force_remove_residues=["ALA_A113"]
+    )
+    assert not residue_atom_lines(cluster_pdb(str(removed)), "ALA", "A", 113), (
+        "ALA_A113 was not force-removed from the cluster"
+    )
+
+
+def test_force_remove_residues_multiple(tmpdir):
+    """force_remove_residues should support force-excluding more than one
+    residue at once."""
+    from qp.cluster.spheres import CenterResidue
+
+    path = os.path.join(os.path.dirname(__file__), "samples", "3a8g")
+    pdb_path = os.path.join(path, "Protoss", "3a8g_protoss.pdb")
+    center_residue = CenterResidue("FE")
+
+    def cluster_pdb(out):
+        return os.path.join(out, "A301", "A301.pdb")
+
+    # Both already part of the default cluster (confirmed via test_force_remove_residues
+    # and the golden 3a8g/A301 spheres)
+    residues_to_remove = [("ALA", "A", 113), ("CYS", "A", 109)]
+
+    removed = tmpdir.mkdir("removed")
+    spheres.extract_clusters(
+        pdb_path, str(removed), center_residue,
+        smooth_method="dummy_atom", mean_distance=3,
+        force_remove_residues=[f"{resname}_{chain}{resnum}" for resname, chain, resnum in residues_to_remove]
+    )
+
+    for resname, chain, resnum in residues_to_remove:
+        assert not residue_atom_lines(cluster_pdb(str(removed)), resname, chain, resnum), (
+            f"{resname}_{chain}{resnum} was not force-removed from the cluster"
+        )
+
+
+@pytest.mark.parametrize("sample_cluster", [("3a8g", ("A301",))], indirect=True)
+def test_force_remove_residues_not_present(tmpdir, sample_cluster):
+    """force_remove_residues naming a residue that was never part of the
+    cluster should be a harmless no-op -- output identical to a plain run."""
+    pdb, metal_ids, path = sample_cluster
+    pdb_path = os.path.join(path, "Protoss", f"{pdb}_protoss.pdb")
+
+    # GLU_A9 is not reached by sphere growth (see test_force_include_residues)
+    spheres.extract_clusters(
+        pdb_path, tmpdir, FE_CENTER,
+        smooth_method="dummy_atom", mean_distance=3, capping=0,
+        force_remove_residues=["GLU_A9"]
+    )
+    check_clusters(path, tmpdir, metal_ids)
+
+
+def test_force_include_force_remove_conflict(tmpdir):
+    """When the same residue is requested via both force_include_residues
+    and force_remove_residues, removal wins."""
+    from qp.cluster.spheres import CenterResidue
+
+    path = os.path.join(os.path.dirname(__file__), "samples", "3a8g")
+    pdb_path = os.path.join(path, "Protoss", "3a8g_protoss.pdb")
+    center_residue = CenterResidue("FE")
+
+    def cluster_pdb(out):
+        return os.path.join(out, "A301", "A301.pdb")
+
+    spheres.extract_clusters(
+        pdb_path, str(tmpdir), center_residue,
+        smooth_method="dummy_atom", mean_distance=3,
+        force_include_residues=["GLU_A9"],
+        force_remove_residues=["GLU_A9"],
+    )
+    assert not residue_atom_lines(cluster_pdb(str(tmpdir)), "GLU", "A", 9), (
+        "GLU_A9 should have been removed -- force_remove_residues wins on conflict"
+    )
+
+
+@pytest.mark.parametrize("sample_cluster", [("3a8g", ("A301",))], indirect=True)
+def test_force_remove_residues_center_protected(tmpdir, sample_cluster, capsys):
+    """force_remove_residues cannot remove the cluster's center; the
+    request is ignored with a warning, and the output is otherwise
+    identical to a plain run (blocked removal is a no-op)."""
+    pdb, metal_ids, path = sample_cluster
+    pdb_path = os.path.join(path, "Protoss", f"{pdb}_protoss.pdb")
+
+    spheres.extract_clusters(
+        pdb_path, tmpdir, FE_CENTER,
+        smooth_method="dummy_atom", mean_distance=3, capping=0,
+        force_remove_residues=["FE_A301"]
+    )
+    check_clusters(path, tmpdir, metal_ids)
+    assert "was not removed" in capsys.readouterr().out
+
+
+def test_force_remove_residues_one_neighbor(tmpdir):
+    """Force-removing a residue with exactly one in-cluster sequence
+    neighbor should cap only that surviving neighbor."""
+    from qp.cluster.spheres import CenterResidue
+
+    path = os.path.join(os.path.dirname(__file__), "samples", "3a8g")
+    pdb_path = os.path.join(path, "Protoss", "3a8g_protoss.pdb")
+    center_residue = CenterResidue("FE")
+
+    def cluster_pdb(out):
+        return os.path.join(out, "A301", "A301.pdb")
+
+    baseline = tmpdir.mkdir("baseline")
+    spheres.extract_clusters(
+        pdb_path, str(baseline), center_residue,
+        smooth_method="dummy_atom", mean_distance=3
+    )
+    baseline_lines = residue_atom_lines(cluster_pdb(str(baseline)), "CYS", "A", 109)
+    assert baseline_lines, "test setup assumption broken: CYS_A109 should already be in the default cluster"
+
+    # VAL_A108's only in-cluster sequence neighbor is CYS_A109 (residue 107
+    # is not part of the cluster)
+    removed = tmpdir.mkdir("removed")
+    spheres.extract_clusters(
+        pdb_path, str(removed), center_residue,
+        smooth_method="dummy_atom", mean_distance=3,
+        force_remove_residues=["VAL_A108"]
+    )
+    assert not residue_atom_lines(cluster_pdb(str(removed)), "VAL", "A", 108), (
+        "VAL_A108 was not force-removed from the cluster"
+    )
+    removed_lines = residue_atom_lines(cluster_pdb(str(removed)), "CYS", "A", 109)
+    assert len(removed_lines) > len(baseline_lines), (
+        "CYS_A109 was not capped after its neighbor VAL_A108 was force-removed"
+    )
+
+
+def test_force_remove_residues_two_neighbors(tmpdir):
+    """Force-removing a residue flanked by two in-cluster sequence
+    neighbors should cap both surviving neighbors.
+
+    Uses SER_A110 (flanked by CYS_A109/LEU_A111), not the originally
+    planned CSD_A112 (flanked by LEU_A111/ALA_A113): CSD is a
+    HETATM-flagged modified residue, and pairing it with ALA_A113 (which
+    has no H atom) trips a pre-existing latent bug in build_hydrogen's
+    no-template capping fallback (assumes an H atom always exists).
+    SER/CYS/LEU are plain ATOM records with real H atoms, so this
+    exercises the same two-neighbor capping path without hitting that
+    unrelated bug. See test_force_remove_residues_two_neighbors_noncanonical
+    below for a HETATM-neighbor case that doesn't trip it.
+    """
+    from qp.cluster.spheres import CenterResidue
+
+    path = os.path.join(os.path.dirname(__file__), "samples", "3a8g")
+    pdb_path = os.path.join(path, "Protoss", "3a8g_protoss.pdb")
+    center_residue = CenterResidue("FE")
+
+    def cluster_pdb(out):
+        return os.path.join(out, "A301", "A301.pdb")
+
+    baseline = tmpdir.mkdir("baseline")
+    spheres.extract_clusters(
+        pdb_path, str(baseline), center_residue,
+        smooth_method="dummy_atom", mean_distance=3
+    )
+    baseline_cys = residue_atom_lines(cluster_pdb(str(baseline)), "CYS", "A", 109)
+    baseline_leu = residue_atom_lines(cluster_pdb(str(baseline)), "LEU", "A", 111)
+    assert baseline_cys and baseline_leu, (
+        "test setup assumption broken: CYS_A109 and LEU_A111 should already be in the default cluster"
+    )
+
+    # SER_A110 is flanked on both sides by in-cluster residues (CYS_A109,
+    # LEU_A111)
+    removed = tmpdir.mkdir("removed")
+    spheres.extract_clusters(
+        pdb_path, str(removed), center_residue,
+        smooth_method="dummy_atom", mean_distance=3,
+        force_remove_residues=["SER_A110"]
+    )
+    assert not residue_atom_lines(cluster_pdb(str(removed)), "SER", "A", 110), (
+        "SER_A110 was not force-removed from the cluster"
+    )
+    removed_cys = residue_atom_lines(cluster_pdb(str(removed)), "CYS", "A", 109)
+    removed_leu = residue_atom_lines(cluster_pdb(str(removed)), "LEU", "A", 111)
+    assert len(removed_cys) > len(baseline_cys), (
+        "CYS_A109 was not capped after its neighbor SER_A110 was force-removed"
+    )
+    assert len(removed_leu) > len(baseline_leu), (
+        "LEU_A111 was not capped after its neighbor SER_A110 was force-removed"
+    )
+
+
+def test_force_remove_residues_one_neighbor_noncanonical(tmpdir):
+    """Force-removing a non-canonical (HETATM-flagged) residue with exactly
+    one in-cluster neighbor should cap only that surviving neighbor.
+
+    Uses CSO_A114 with sphere_count=1, which leaves THR_A115 (sphere 2)
+    outside the cluster and ALA_A113 (sphere 1) as its only in-cluster
+    neighbor. ALA_A113 needs a C-side cap here (CSO sits on its C side),
+    which doesn't depend on an existing H atom, unlike the N-side fallback
+    -- so this doesn't trip the build_hydrogen bug described above.
+    """
+    path = os.path.join(os.path.dirname(__file__), "samples", "3a8g")
+    pdb_path = os.path.join(path, "Protoss", "3a8g_protoss.pdb")
+
+    def cluster_pdb(out):
+        return os.path.join(out, "A301", "A301.pdb")
+
+    baseline = tmpdir.mkdir("baseline")
+    spheres.extract_clusters(
+        pdb_path, str(baseline), FE_CENTER,
+        smooth_method="dummy_atom", mean_distance=3, sphere_count=1
+    )
+    baseline_ala = residue_atom_lines(cluster_pdb(str(baseline)), "ALA", "A", 113)
+    assert baseline_ala, "test setup assumption broken: ALA_A113 should already be in the cluster"
+    assert not residue_atom_lines(cluster_pdb(str(baseline)), "THR", "A", 115), (
+        "test setup assumption broken: THR_A115 should be outside a single-sphere cluster"
+    )
+
+    removed = tmpdir.mkdir("removed")
+    spheres.extract_clusters(
+        pdb_path, str(removed), FE_CENTER,
+        smooth_method="dummy_atom", mean_distance=3, sphere_count=1,
+        force_remove_residues=["CSO_A114"]
+    )
+    assert not residue_atom_lines(cluster_pdb(str(removed)), "CSO", "A", 114), (
+        "CSO_A114 was not force-removed from the cluster"
+    )
+    removed_ala = residue_atom_lines(cluster_pdb(str(removed)), "ALA", "A", 113)
+    assert len(removed_ala) > len(baseline_ala), (
+        "ALA_A113 was not capped after its neighbor CSO_A114 was force-removed"
+    )
+
+
+def test_force_remove_residues_two_neighbors_noncanonical(tmpdir):
+    """Force-removing a non-canonical (HETATM-flagged) residue flanked by
+    two in-cluster neighbors should cap both survivors.
+
+    Uses CSO_A114 (flanked by ALA_A113/THR_A115). Both survivors need
+    fallback (no-template) caps here too, same shape as
+    test_force_remove_residues_two_neighbors, but ALA_A113's is a C-side
+    cap (no H atom needed) and THR_A115's is an N-side cap where THR_A115
+    *does* have an H atom -- so, unlike removing CSD_A112 next to
+    ALA_A113's N side, this doesn't trip the build_hydrogen bug either.
+    """
+    path = os.path.join(os.path.dirname(__file__), "samples", "3a8g")
+    pdb_path = os.path.join(path, "Protoss", "3a8g_protoss.pdb")
+
+    def cluster_pdb(out):
+        return os.path.join(out, "A301", "A301.pdb")
+
+    baseline = tmpdir.mkdir("baseline")
+    spheres.extract_clusters(
+        pdb_path, str(baseline), FE_CENTER,
+        smooth_method="dummy_atom", mean_distance=3
+    )
+    baseline_ala = residue_atom_lines(cluster_pdb(str(baseline)), "ALA", "A", 113)
+    baseline_thr = residue_atom_lines(cluster_pdb(str(baseline)), "THR", "A", 115)
+    assert baseline_ala and baseline_thr, (
+        "test setup assumption broken: ALA_A113 and THR_A115 should already be in the default cluster"
+    )
+
+    removed = tmpdir.mkdir("removed")
+    spheres.extract_clusters(
+        pdb_path, str(removed), FE_CENTER,
+        smooth_method="dummy_atom", mean_distance=3,
+        force_remove_residues=["CSO_A114"]
+    )
+    assert not residue_atom_lines(cluster_pdb(str(removed)), "CSO", "A", 114), (
+        "CSO_A114 was not force-removed from the cluster"
+    )
+    removed_ala = residue_atom_lines(cluster_pdb(str(removed)), "ALA", "A", 113)
+    removed_thr = residue_atom_lines(cluster_pdb(str(removed)), "THR", "A", 115)
+    assert len(removed_ala) > len(baseline_ala), (
+        "ALA_A113 was not capped after its neighbor CSO_A114 was force-removed"
+    )
+    assert len(removed_thr) > len(baseline_thr), (
+        "THR_A115 was not capped after its neighbor CSO_A114 was force-removed"
+    )
 
 
 @pytest.mark.parametrize("sample_cluster", [
@@ -127,11 +591,12 @@ def test_cluster_name_template(tmpdir, sample_cluster):
     pdb, metal_ids, path = sample_cluster
     pdb_path = os.path.join(path, "Protoss", f"{pdb}_protoss.pdb")
     spheres.extract_clusters(
-        pdb_path, tmpdir, ["BGC", "GAL", "NGA", "SIA", "NI"],
+        pdb_path, tmpdir, SUGAR_CENTER,
         merge_cutoff=4.0,
         smooth_method="dummy_atom", mean_distance=3,
         first_sphere_radius=4.0,
-        cluster_name_template="A_{radius}"
+        cluster_name_template="A_{radius}",
+        capping=0,
     )
 
     expected_names = ["A_4", "A_4_1", "A_4_2", "A_4_3", "A_4_4"]
@@ -178,7 +643,7 @@ def test_cluster_name_template_bad_field(tmpdir):
     with pytest.raises(ValueError, match="cluster_name_template"):
         spheres.extract_clusters(
             os.path.join(os.path.dirname(__file__), "samples", "1lm6", "Protoss", "1lm6_protoss.pdb"),
-            tmpdir, ["FE", "FE2"],
+            tmpdir, FE_CENTER,
             smooth_method="box_plot",
             cluster_name_template="A_{not_a_real_field}"
         )

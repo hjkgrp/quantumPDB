@@ -1,6 +1,9 @@
 # MAC OS
 .DS_Store
 
+# Written by versioningit on install/build; do not track (avoids dirty trees).
+qp/_version.py
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
@@ -93,6 +96,12 @@ celerybeat-schedule
 .venv
 venv/
 ENV/
+
+# Local planning/status notes -- not part of the published repo
+plans/
+
+# Local planning/status notes -- not part of the published repo
+plans/
 
 # Spyder project settings
 .spyderproject

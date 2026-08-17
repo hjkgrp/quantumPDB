@@ -2,6 +2,7 @@ input: [1sp9, 2q4a, 3a8g, 3x20, 6f2a]
 output_dir: qp/tests/samples
 modeller: true
 protoss: true
+find_backbone_atoms: true
 coordination: true
 skip: all
 optimize_select_residues: 1
@@ -13,6 +14,8 @@ max_atom_count: ~
 merge_distance_cutoff: 0.0
 smoothing_method: 2
 additional_ligands: []
+force_include_residues: []
+force_remove_residues: []
 capping_method: 1
 
 compute_charges: true

@@ -25,7 +25,17 @@ def test_parse_input(tmpdir):
     with open(pdb_path, "w") as f:
         pass
     input_pdbs = [batch, "3a8g", pdb_path]
-    
-    expected_pdbs = [(p, os.path.join(tmpdir, p, f"{p}.pdb")) for p in pdbs]
-    output_pdbs = setup.parse_input(input_pdbs, tmpdir)
+    center_yaml_residues = ["FE", "FE2"]
+
+    expected_pdbs = [(p, os.path.join(tmpdir, p, f"{p}.pdb"), None) for p in pdbs]
+    # Local .pdb is normalized into the output dir; source records the preserved original
+    expected_pdbs[-1] = (
+        "4ilv",
+        os.path.join(tmpdir, "4ilv", "4ilv.pdb"),
+        {"type": "amber", "path": os.path.join(tmpdir, "4ilv", "4ilv_original.pdb")},
+    )
+    output_pdbs, output_centers, _, _ = setup.parse_input(
+        input_pdbs, tmpdir, center_yaml_residues
+    )
     assert expected_pdbs == output_pdbs, "Parsed input does not match expected"
+    assert output_centers == center_yaml_residues, "Center residues do not match expected"

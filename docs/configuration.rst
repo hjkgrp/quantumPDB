@@ -54,6 +54,11 @@ cluster extraction).
        resolving steric clashes. Under ProteinsPlus API v2 this loop is
        currently inactive because the Protoss clash log is no longer
        available; the parameter is retained for compatibility.
+   * - ``convert_to_nhie_oxo``
+     - ``false``
+     - Enable the specialized AKG → succinate / oxo NHIE conversion after
+       Protoss. Requires ``modeller`` and ``protoss``. Legacy alias
+       ``convert_to_oxo`` is also accepted. See :doc:`special_workflows`.
 
 **Cluster model parameters:**
 
@@ -67,13 +72,34 @@ cluster extraction).
    * - ``center_residues``
      - ``[]``
      - Three-letter residue code(s) for the cluster center. Use YAML list
-       syntax: ``[FE]``, ``[FE, FE2]``. See :doc:`input_formats` for the
-       full center definition syntax.
+       syntax: ``[FE]``, ``[FE, FE2]``. In batch mode a YAML list is consumed
+       **one entry per PDB**. For multiple centers inside one structure, use
+       fuzzy CSV/YAML syntax, an explicit CSV ``center`` column, or
+       ``merge_distance_cutoff``. See :doc:`input_formats`.
    * - ``additional_ligands``
      - ``[]``
      - List of three-letter residue codes to force into the first interaction
        sphere (e.g., ``[AKG, SIN]``). These residues are also protected from
        pruning.
+   * - ``force_include_residues``
+     - ``[]``
+     - List of specific protein residues to force-include, even if they lie
+       beyond the grown spheres, given as ``RESNAME_CHAINID`` keys (e.g.,
+       ``[HIS_A123]``). Added residues are capped like any other extracted
+       residue and protected from ``max_atom_count`` pruning. Can also be
+       set per PDB via an ``force_include_residues`` CSV column, which takes
+       priority over this YAML list when present. See :doc:`input_formats`.
+   * - ``force_remove_residues``
+     - ``[]``
+     - List of specific protein residues to force-exclude, given as
+       ``RESNAME_CHAINID`` keys (e.g., ``[HIS_A123]``), even if sphere
+       growth, ``additional_ligands``, or ``force_include_residues`` would
+       otherwise include them. On conflict with ``force_include_residues``,
+       removal wins. Cannot remove the cluster's center (ignored with a
+       warning). Shrink-only: does not backfill toward ``max_atom_count``.
+       Can also be set per PDB via a ``force_remove_residues`` CSV column,
+       which takes priority over this YAML list when present. See
+       :doc:`input_formats`.
    * - ``number_of_spheres``
      - ``2``
      - Number of interaction spheres to construct. More spheres capture more
@@ -86,7 +112,10 @@ cluster extraction).
    * - ``include_ligands``
      - ``2``
      - Ligand inclusion level: ``0`` = first sphere only, ``1`` = non-water
-       ligands, ``2`` = all ligands and waters.
+       ligands, ``2`` = all ligands and waters, ``3`` = center residue(s),
+       standard amino acids, and waters only (exclude non-standard ligands
+       from outer spheres). Protoss RGP/R# attachment points are collected
+       automatically when charges are computed and used for hydrogen capping.
    * - ``max_atom_count``
      - ``None``
      - Maximum number of atoms in the QM cluster. When set, the most distant
@@ -104,8 +133,10 @@ cluster extraction).
        calculations and ACE/NME for geometry optimizations.
    * - ``smoothing_method``
      - ``2``
-     - Voronoi regularization method: ``0`` = box plot, ``1`` = DBSCAN,
-       ``2`` = dummy atom (recommended), ``3`` = none.
+     - Voronoi regularization method mapped by the CLI as:
+       ``0`` → ``box_plot``, ``1`` → ``dbscan`` (``eps=6``, ``min_samples=3``),
+       ``2`` → ``dummy_atom`` (``mean_distance=3``, recommended),
+       ``3`` → no smoothing. See :doc:`cluster_models`.
 
 **Output control:**
 
@@ -119,7 +150,8 @@ cluster extraction).
    * - ``compute_charges``
      - ``true``
      - Compute per-residue charges from protonation states and ligand
-       properties.
+       properties. If ``true`` (or if ``capping_method`` is non-zero), Protoss
+       is forced on.
    * - ``count_residues``
      - ``true``
      - Count the number of residues in each interaction sphere and write
@@ -127,6 +159,16 @@ cluster extraction).
    * - ``write_xyz``
      - ``true``
      - Write XYZ coordinate files alongside PDB cluster files.
+   * - ``write_hetero_pdb``
+     - ``false``
+     - When writing the combined cluster PDB, keep HETATM records. Default
+       combined PDBs focus on the QM-relevant capped model.
+   * - ``cluster_name_template``
+     - ``None``
+     - Optional format string for cluster directory / file names. Available
+       fields include ``radius``, ``metal_id``, ``index``, and ``pdb``.
+       Default (``None``) names clusters by ``metal_id``. When set, also
+       writes ``cluster_name_map.csv``.
 
 
 SUBMIT Parameters
@@ -148,7 +190,8 @@ These parameters control ``qp submit`` (QM job creation and submission).
      - ``true`` for geometry optimization, ``false`` for single-point energy.
    * - ``method``
      - ``'wpbeh'``
-     - DFT functional. TeraChem supports: wpbeh, b3lyp, ub3lyp, pbe0, etc.
+     - DFT functional used as the job subdirectory name and in the TeraChem
+       input. Examples: ``wpbeh``, ``b3lyp``, ``ub3lyp``, ``pbe0``.
    * - ``basis``
      - ``'lacvps_ecp'``
      - Basis set. Common choices: ``lacvps_ecp``, ``6-31g*``, ``def2-svp``.
@@ -192,7 +235,9 @@ These parameters control ``qp submit`` (QM job creation and submission).
        When ``null``, uses the built-in AMBER ff14SB charges.
    * - ``scheduler``
      - ``'slurm'``
-     - Job scheduler: ``'slurm'`` or ``'sge'``.
+     - Job scheduler: ``'slurm'`` or ``'sge'``. Generated scripts include
+       site-specific module / partition settings that may need editing for
+       your cluster.
    * - ``pcm_radii_file``
      - ``'pcm_radii'``
      - Path to a custom PCM radii file (TeraChem-specific).
@@ -208,13 +253,20 @@ These parameters control ``qp submit`` (QM job creation and submission).
      - Description
    * - ``create_jobs``
      - ``false``
-     - Generate QM input files for each cluster.
+     - Generate TeraChem ``qmscript.in`` and scheduler scripts for each
+       cluster. Requires CSV ``input`` with ``oxidation`` and
+       ``multiplicity``.
    * - ``submit_jobs``
      - ``false``
      - Submit generated jobs to the scheduler.
    * - ``job_count``
      - ``80``
      - Maximum number of concurrent jobs on the scheduler.
+
+.. note::
+
+   ``qp submit`` expects ``input`` to be a path to an existing CSV file. PDB
+   IDs and YAML lists accepted by ``qp run`` are not valid submit inputs.
 
 
 ANALYZE Parameters
@@ -231,7 +283,8 @@ These parameters control ``qp analyze`` (job monitoring and post-processing).
      - Description
    * - ``job_checkup``
      - ``false``
-     - Check the status of all QM jobs and generate summary reports.
+     - Check the status of all QM jobs and generate summary reports under
+       ``checkup/`` in the current working directory.
    * - ``delete_queued``
      - ``false``
      - Delete ``.submit_record`` files for unfinished jobs, allowing them
@@ -239,11 +292,13 @@ These parameters control ``qp analyze`` (job monitoring and post-processing).
    * - ``multiwfn_path``
      - ``'Multiwfn'``
      - Path to the Multiwfn executable. If Multiwfn is on your ``PATH``,
-       the default works.
+       the default works. Atomic radii come from the bundled
+       ``qp.resources`` package (there is no ``atmrad_path`` config key).
    * - ``charge_scheme``
      - ``'Hirshfeld'``
-     - Charge scheme for partial charge analysis. Options: ``Hirshfeld``,
+     - Single charge scheme for Multiwfn analysis. Options: ``Hirshfeld``,
        ``Voronoi``, ``Mulliken``, ``ADCH``, ``Hirshfeld-I``, ``CM5``.
+       Do not pass a comma-separated list.
    * - ``calc_charge_schemes``
      - ``false``
      - Run Multiwfn to compute partial atomic charges.
