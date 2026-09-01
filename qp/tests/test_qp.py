@@ -12,7 +12,12 @@ from unittest import mock
 import pytest
 
 import qp
-from qp.manager.charge_embedding import load_custom_charges, get_charges, parse_pdb_to_xyz
+from qp.manager.charge_embedding import (
+    load_custom_charges,
+    get_charges,
+    parse_pdb_to_xyz,
+    pdb_has_hydrogens,
+)
 from qp.manager.job_scripts import write_qm
 
 
@@ -66,6 +71,7 @@ def test_get_charges_default_uses_ff14sb():
          mock.patch('qp.manager.charge_embedding.remove_qm_atoms'), \
          mock.patch('qp.manager.charge_embedding.read_xyz', return_value=__import__('numpy').array([[0, 0, 0]])), \
          mock.patch('qp.manager.charge_embedding.parse_pdb_to_xyz'), \
+         mock.patch('qp.manager.charge_embedding.pdb_has_hydrogens', return_value=True), \
          mock.patch('os.path.exists', return_value=False), \
          mock.patch('os.mkdir'), \
          mock.patch('os.getcwd', return_value='/fake/output/pdb1/A200/method'), \
@@ -97,6 +103,7 @@ def test_get_charges_custom_file_used():
              mock.patch('qp.manager.charge_embedding.remove_qm_atoms'), \
              mock.patch('qp.manager.charge_embedding.read_xyz', return_value=__import__('numpy').array([[0, 0, 0]])), \
              mock.patch('qp.manager.charge_embedding.parse_pdb_to_xyz'), \
+             mock.patch('qp.manager.charge_embedding.pdb_has_hydrogens', return_value=True), \
              mock.patch('os.path.exists', side_effect=_exists_side_effect), \
              mock.patch('os.mkdir'), \
              mock.patch('os.getcwd', return_value='/fake/output/pdb1/A200/method'), \
@@ -105,6 +112,66 @@ def test_get_charges_custom_file_used():
             mock_ff.assert_not_called()
     finally:
         os.unlink(tmppath)
+
+
+def _write_pdb(lines):
+    """Write *lines* to a temporary .pdb file and return its path."""
+    with tempfile.NamedTemporaryFile(mode='w', suffix='.pdb', delete=False) as f:
+        f.write("\n".join(lines) + "\n")
+        return f.name
+
+
+def test_pdb_has_hydrogens_detects_element_column():
+    """A hydrogen flagged in the element column (77-78) is detected."""
+    path = _write_pdb([
+        "ATOM      1  N   ALA A   1      0.000   0.000   0.000  1.00  0.00           N",
+        "ATOM      2  H   ALA A   1      1.000   0.000   0.000  1.00  0.00           H",
+    ])
+    try:
+        assert pdb_has_hydrogens(path) is True
+    finally:
+        os.unlink(path)
+
+
+def test_pdb_has_hydrogens_false_when_unprotonated():
+    """A structure with only heavy atoms is reported as having no hydrogens."""
+    path = _write_pdb([
+        "ATOM      1  N   ALA A   1      0.000   0.000   0.000  1.00  0.00           N",
+        "ATOM      2  CA  ALA A   1      1.000   0.000   0.000  1.00  0.00           C",
+    ])
+    try:
+        assert pdb_has_hydrogens(path) is False
+    finally:
+        os.unlink(path)
+
+
+def test_pdb_has_hydrogens_infers_element_from_atom_name():
+    """When the element column is blank, the atom name (e.g. "1HD1") is used."""
+    path = _write_pdb([
+        "ATOM      1  N   ALA A   1      0.000   0.000   0.000  1.00  0.00",
+        "ATOM      2 1HD1 ALA A   1      1.000   0.000   0.000  1.00  0.00",
+    ])
+    try:
+        assert pdb_has_hydrogens(path) is True
+    finally:
+        os.unlink(path)
+
+
+def test_get_charges_warns_when_source_unprotonated():
+    """get_charges emits a warning when the source structure has no hydrogens."""
+    with mock.patch('qp.manager.charge_embedding.ff14SB_dict.get_ff14SB_dict', return_value={"ALA": {"N": -0.4157}}), \
+         mock.patch('qp.manager.charge_embedding.rename_and_clean_resnames'), \
+         mock.patch('qp.manager.charge_embedding.parse_pdb'), \
+         mock.patch('qp.manager.charge_embedding.remove_qm_atoms'), \
+         mock.patch('qp.manager.charge_embedding.read_xyz', return_value=__import__('numpy').array([[0, 0, 0]])), \
+         mock.patch('qp.manager.charge_embedding.parse_pdb_to_xyz'), \
+         mock.patch('qp.manager.charge_embedding.pdb_has_hydrogens', return_value=False), \
+         mock.patch('os.path.exists', return_value=False), \
+         mock.patch('os.mkdir'), \
+         mock.patch('os.getcwd', return_value='/fake/output/pdb1/A200/method'), \
+         mock.patch('shutil.rmtree'):
+        with pytest.warns(UserWarning, match="does not appear to be protonated"):
+            get_charges(20)
 
 
 def test_parse_pdb_to_xyz_residue_based_selection():
